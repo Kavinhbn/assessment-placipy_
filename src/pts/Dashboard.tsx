@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
+import { FileText, Calendar, BarChart3, Users } from "lucide-react";
 
 const Dashboard: React.FC = () => {
   const navigate = useNavigate();
@@ -22,25 +23,25 @@ const Dashboard: React.FC = () => {
       title: "Create New Assessment",
       description: "Design and create a new assessment with questions and settings",
       action: "create",
-      icon: "📝"
+      icon: <FileText size={24} />
     },
     {
       title: "Schedule Assessment", 
       description: "Schedule existing assessments for specific batches and dates",
       action: "schedule",
-      icon: "📅"
+      icon: <Calendar size={24} />
     },
     {
       title: "View Analytics",
       description: "Analyze student performance and generate detailed reports",
       action: "stats", 
-      icon: "📊"
+      icon: <BarChart3 size={24} />
     },
     {
       title: "Manage Students",
       description: "View and manage student enrollments and batch assignments",
       action: "students",
-      icon: "👥"
+      icon: <Users size={24} />
     }
   ]);
 

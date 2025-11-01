@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { User, Lock, Settings, BarChart3, Calendar, Globe, Camera } from "lucide-react";
 
 interface PersonalInfo {
   firstName: string;
@@ -263,7 +264,7 @@ const Profile: React.FC = () => {
                 }}
                 title="Change Profile Picture"
               >
-                📷
+                <Camera size={14} />
               </button>
             )}
           </div>
@@ -864,9 +865,13 @@ const Profile: React.FC = () => {
                   <h4 style={{ margin: "0 0 8px 0", color: "#523C48" }}>
                     {activity.action}
                   </h4>
-                  <div style={{ display: "flex", gap: "20px", fontSize: "0.9rem", color: "#A4878D" }}>
-                    <span>📅 {activity.timestamp}</span>
-                    <span>🌐 {activity.ip}</span>
+                  <div style={{ display: "flex", gap: "20px", fontSize: "0.9rem", color: "#A4878D", alignItems: "center" }}>
+                    <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <Calendar size={14} /> {activity.timestamp}
+                    </span>
+                    <span style={{ display: "flex", alignItems: "center", gap: "5px" }}>
+                      <Globe size={14} /> {activity.ip}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -904,10 +909,10 @@ const Profile: React.FC = () => {
       <div className="pts-form-container">
         <div style={{ display: "flex", gap: "10px", marginBottom: "0", flexWrap: "wrap" }}>
           {[
-            { key: 'personal', label: 'Personal Info', icon: '👤' },
-            { key: 'security', label: 'Security', icon: '🔒' },
-            { key: 'preferences', label: 'Preferences', icon: '⚙️' },
-            { key: 'activity', label: 'Activity Log', icon: '📊' },
+            { key: 'personal', label: 'Personal Info', icon: <User size={16} /> },
+            { key: 'security', label: 'Security', icon: <Lock size={16} /> },
+            { key: 'preferences', label: 'Preferences', icon: <Settings size={16} /> },
+            { key: 'activity', label: 'Activity Log', icon: <BarChart3 size={16} /> },
           ].map(tab => (
             <button
               key={tab.key}
