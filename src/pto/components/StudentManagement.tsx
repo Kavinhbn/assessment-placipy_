@@ -12,7 +12,7 @@ interface Student {
 }
 
 const StudentManagement: React.FC = () => {
-  const [students, setStudents] = useState<Student[]>([
+  const [students] = useState<Student[]>([
     { id: 1, name: 'Alice Johnson', rollNumber: 'CS001', department: 'Computer Science', email: 'alice@college.edu', testsParticipated: 5, avgScore: 85 },
     { id: 2, name: 'Bob Williams', rollNumber: 'CS002', department: 'Computer Science', email: 'bob@college.edu', testsParticipated: 4, avgScore: 78 },
     { id: 3, name: 'Charlie Brown', rollNumber: 'ECE001', department: 'Electronics', email: 'charlie@college.edu', testsParticipated: 3, avgScore: 82 },
@@ -69,34 +69,6 @@ const StudentManagement: React.FC = () => {
 
   return (
     <div className="pto-component-page">
-      <div className="page-header">
-        <h2 className="page-title">
-          <FaUserGraduate className="page-icon" />
-          Student Management
-        </h2>
-        <div className="header-actions">
-          <button 
-            className="primary-btn"
-            onClick={() => {
-              setSelectedStudents([]);
-              setIsMessageModalOpen(true);
-            }}
-            disabled={selectedStudents.length === 0}
-          >
-            <FaEnvelope /> Send Message ({selectedStudents.length})
-          </button>
-          <button 
-            className="secondary-btn"
-            onClick={() => {
-              setSelectedStudents([]);
-              setIsMessageModalOpen(true);
-            }}
-          >
-            <FaEnvelope /> Send Announcement
-          </button>
-        </div>
-      </div>
-
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -120,6 +92,29 @@ const StudentManagement: React.FC = () => {
             <p className="stat-value">{students.reduce((sum, s) => sum + s.testsParticipated, 0)}</p>
           </div>
         </div>
+      </div>
+
+      {/* Action Buttons */}
+      <div className="action-buttons-section">
+        <button 
+          className="primary-btn"
+          onClick={() => {
+            setSelectedStudents([]);
+            setIsMessageModalOpen(true);
+          }}
+          disabled={selectedStudents.length === 0}
+        >
+          <FaEnvelope /> Send Message ({selectedStudents.length})
+        </button>
+        <button 
+          className="secondary-btn"
+          onClick={() => {
+            setSelectedStudents([]);
+            setIsMessageModalOpen(true);
+          }}
+        >
+          <FaEnvelope /> Send Announcement
+        </button>
       </div>
 
       {/* Search and Filter */}

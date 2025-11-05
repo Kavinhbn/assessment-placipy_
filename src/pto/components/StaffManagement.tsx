@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaUser, FaEdit, FaTrash, FaUserPlus, FaBuilding, FaLock, FaUnlock } from 'react-icons/fa';
+import { FaUser, FaCog, FaTrash, FaUserPlus, FaBuilding, FaLock, FaUnlock } from 'react-icons/fa';
 
 interface StaffMember {
   id: number;
@@ -136,16 +136,6 @@ const StaffManagement: React.FC = () => {
 
   return (
     <div className="pto-component-page">
-      <div className="page-header">
-        <h2 className="page-title">
-          <FaUser className="page-icon" />
-          Staff Management
-        </h2>
-        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
-          <FaUserPlus /> Create Staff Account
-        </button>
-      </div>
-
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -164,6 +154,13 @@ const StaffManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Action Button */}
+      <div className="action-buttons-section">
+        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <FaUserPlus /> Create Staff Account
+        </button>
+      </div>
+
       {/* Staff Table */}
       <div className="table-container">
         <table className="data-table">
@@ -180,7 +177,7 @@ const StaffManagement: React.FC = () => {
           </thead>
           <tbody>
             {staff.map(member => (
-              <tr key={member.id}>
+              <tr key={member.id} onClick={(e) => e.stopPropagation()}>
                 <td>{member.name}</td>
                 <td>{member.email}</td>
                 <td>{member.phone}</td>
@@ -202,11 +199,17 @@ const StaffManagement: React.FC = () => {
                 <td>
                   <div className="action-buttons">
                     <button 
-                      className="icon-btn edit-btn" 
-                      onClick={() => handleEditStaff(member)}
+                      className="edit-btn text-btn" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleEditStaff(member);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       title="Edit"
+                      type="button"
                     >
-                      <FaEdit />
+                      Edit
                     </button>
                     <button 
                       className="icon-btn delete-btn" 

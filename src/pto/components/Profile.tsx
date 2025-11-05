@@ -79,13 +79,6 @@ const Profile: React.FC = () => {
   return (
     <div className="pto-component-page">
       <div className="profile-page">
-        <div className="page-header">
-          <h2 className="page-title">
-            <FaUser className="page-icon" />
-            Profile Management
-          </h2>
-        </div>
-
         <div className="tabs">
           <button 
             className={`tab-btn ${activeTab === 'details' ? 'active' : ''}`}
