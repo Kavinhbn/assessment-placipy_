@@ -1,7 +1,6 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import ProfileService from '../../services/profile.service';
-import type { AdminProfile, SecuritySettings, AdminPreferences, PasswordChangeRequest } from '../../services/profile.service';
+import type { AdminProfile, SecuritySettings, AdminPreferences } from '../../services/profile.service';
 
 const Profile: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +9,14 @@ const Profile: React.FC = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
   const [errorMessage, setErrorMessage] = useState('');
+  const [showImageSelector, setShowImageSelector] = useState(false);
+
+  // Static profile images
+  const profileImages = [
+    'https://images.unsplash.com/photo-1494790108755-2616b612b977?w=150&h=150&fit=crop&crop=face',
+    'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+    'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
+  ];
 
   // Profile State
   const [profile, setProfile] = useState<AdminProfile>({
@@ -153,6 +160,16 @@ const Profile: React.FC = () => {
     }
   };
 
+  const handleImageSelect = (imageUrl: string) => {
+    setProfile(prev => ({
+      ...prev,
+      profilePicture: imageUrl
+    }));
+    setShowImageSelector(false);
+    setSuccessMessage('Profile picture updated successfully!');
+    setTimeout(() => setSuccessMessage(''), 3000);
+  };
+
   return (
     <div className="admin-page-container">
       <div className="admin-page-header">
@@ -223,15 +240,35 @@ const Profile: React.FC = () => {
             <div className="admin-profile-header">
               <div className="admin-profile-picture">
                 <img 
-                  src={profile.profilePicture || 'https://images.unsplash.com/photo-1494790108755-2616b612b977?w=150&h=150&fit=crop&crop=face'} 
+                  src={profile.profilePicture || profileImages[0]} 
                   alt="Profile" 
                 />
                 {isEditing.personal && (
-                  <button className="admin-profile-picture-edit">
+                  <button 
+                    className="admin-profile-picture-edit"
+                    onClick={() => setShowImageSelector(!showImageSelector)}
+                    title="Change Profile Picture"
+                  >
                     <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                       <path d="M9 2l-1 1v2h2V3h8v8h-2v2h2l1-1V2l-1-1H9zM3 6l-1 1v10l1 1h10l1-1v-2h-2v2H3V6h2V4H3z"/>
                     </svg>
                   </button>
+                )}
+                {showImageSelector && (
+                  <div className="admin-image-selector">
+                    <p>Choose a profile picture:</p>
+                    <div className="admin-image-options">
+                      {profileImages.map((imageUrl, index) => (
+                        <button
+                          key={index}
+                          className={`admin-image-option ${profile.profilePicture === imageUrl ? 'selected' : ''}`}
+                          onClick={() => handleImageSelect(imageUrl)}
+                        >
+                          <img src={imageUrl} alt={`Option ${index + 1}`} />
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
               <div className="admin-profile-basic">

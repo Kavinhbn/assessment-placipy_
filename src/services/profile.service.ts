@@ -201,27 +201,24 @@ class ProfileService {
   }
 
   /**
-   * Upload profile picture
+   * Update profile picture with static image URL
    */
-  async uploadProfilePicture(file: File): Promise<string> {
+  async updateProfilePicture(profilePictureUrl: string): Promise<string> {
     try {
-      const formData = new FormData();
-      formData.append('profilePicture', file);
-
-      const response = await axios.post(`${this.apiUrl}/profile/upload-picture`, formData, {
-        headers: {
-          'Content-Type': 'multipart/form-data',
-          'Authorization': `Bearer ${AuthService.getAccessToken()}`
+      const response = await axios.put(`${this.apiUrl}/profile/picture`, 
+        { profilePictureUrl }, 
+        {
+          headers: this.getAuthHeaders()
         }
-      });
+      );
 
       if (response.data.success) {
         return response.data.profilePictureUrl;
       } else {
-        throw new Error(response.data.message || 'Failed to upload profile picture');
+        throw new Error(response.data.message || 'Failed to update profile picture');
       }
     } catch (error) {
-      console.error('Upload profile picture error:', error);
+      console.error('Update profile picture error:', error);
       throw error;
     }
   }

@@ -1284,6 +1284,65 @@
   transform: translateX(-2px);
 }
 
+/* Profile Image Selector */
+.admin-image-selector {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: white;
+  border: 1px solid #D0BFE7;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  z-index: 10;
+  min-width: 220px;
+  margin-top: 10px;
+}
+
+.admin-image-selector p {
+  margin: 0 0 15px 0;
+  font-weight: 600;
+  color: #523C48;
+  font-size: 0.9rem;
+  text-align: center;
+}
+
+.admin-image-options {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.admin-image-option {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  overflow: hidden;
+  border: 2px solid #D0BFE7;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  background: none;
+  padding: 0;
+}
+
+.admin-image-option:hover {
+  border-color: #9768E1;
+  transform: scale(1.1);
+}
+
+.admin-image-option.selected {
+  border-color: #9768E1;
+  border-width: 3px;
+  box-shadow: 0 0 0 2px rgba(151, 104, 225, 0.2);
+}
+
+.admin-image-option img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
 /* Profile Responsive Design */
 @media (max-width: 768px) {
   .admin-profile-tabs {
@@ -1322,6 +1381,26 @@
   .admin-back-button {
     align-self: stretch;
     justify-content: center;
+  }
+
+  .admin-image-selector {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90%;
+    max-width: 300px;
+  }
+
+  .admin-image-options {
+    flex-direction: column;
+    gap: 15px;
+  }
+
+  .admin-image-option {
+    width: 60px;
+    height: 60px;
+    align-self: center;
   }
 }
 

@@ -217,26 +217,38 @@ router.get('/profile/security', authMiddleware.authenticateToken, async (req, re
     }
 });
 
-router.post('/profile/upload-picture', authMiddleware.authenticateToken, async (req, res) => {
+router.put('/profile/picture', authMiddleware.authenticateToken, async (req, res) => {
     try {
         const userId = req.user.userId;
-        const { imageData, fileName } = req.body;
+        const { profilePictureUrl } = req.body;
 
-        // In real implementation:
-        // 1. Upload to S3 bucket
-        // 2. Update user profile with new image URL
-        const profilePictureUrl = `https://s3.amazonaws.com/profile-pictures/${userId}/${fileName}`;
+        // Validate that the URL is from our approved static images
+        const allowedImages = [
+            'https://images.unsplash.com/photo-1494790108755-2616b612b977?w=150&h=150&fit=crop&crop=face',
+            'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face',
+            'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face'
+        ];
+
+        if (!allowedImages.includes(profilePictureUrl)) {
+            return res.status(400).json({
+                success: false,
+                message: 'Invalid profile picture URL'
+            });
+        }
+
+        // In real implementation, update user profile in DynamoDB
+        // await dynamoDBService.updateUserProfilePicture(userId, profilePictureUrl);
 
         res.json({
             success: true,
-            message: 'Profile picture uploaded successfully',
+            message: 'Profile picture updated successfully',
             profilePictureUrl
         });
     } catch (error) {
-        console.error('Profile picture upload error:', error);
+        console.error('Profile picture update error:', error);
         res.status(500).json({
             success: false,
-            message: 'Failed to upload profile picture'
+            message: 'Failed to update profile picture'
         });
     }
 });
