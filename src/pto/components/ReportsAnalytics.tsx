@@ -48,21 +48,14 @@ const ReportsAnalytics: React.FC = () => {
 
   return (
     <div className="pto-component-page">
-      <div className="page-header">
-        <h2 className="page-title">
-          <FaChartBar className="page-icon" />
-          Reports & Analytics
-        </h2>
-        <div className="header-actions">
-          <div className="export-buttons">
-            <button className="export-btn" onClick={() => handleExport('excel')}>
-              <FaFileExcel /> Export Excel
-            </button>
-            <button className="export-btn" onClick={() => handleExport('pdf')}>
-              <FaFilePdf /> Export PDF
-            </button>
-          </div>
-        </div>
+      {/* Export Buttons */}
+      <div className="action-buttons-section">
+        <button className="export-btn" onClick={() => handleExport('excel')}>
+          <FaFileExcel /> Export Excel
+        </button>
+        <button className="export-btn" onClick={() => handleExport('pdf')}>
+          <FaFilePdf /> Export PDF
+        </button>
       </div>
 
       {/* Filters */}

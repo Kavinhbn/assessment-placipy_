@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaBuilding, FaEdit, FaTrash, FaUserPlus, FaChartBar } from 'react-icons/fa';
+import { FaBuilding, FaCog, FaTrash, FaUserPlus, FaChartBar } from 'react-icons/fa';
 
 interface Department {
   id: number;
@@ -76,16 +76,6 @@ const DepartmentManagement: React.FC = () => {
 
   return (
     <div className="pto-component-page">
-      <div className="page-header">
-        <h2 className="page-title">
-          <FaBuilding className="page-icon" />
-          Department Management
-        </h2>
-        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
-          <FaUserPlus /> Add Department
-        </button>
-      </div>
-
       {/* Statistics Cards */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -111,6 +101,13 @@ const DepartmentManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Action Button */}
+      <div className="action-buttons-section">
+        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <FaUserPlus /> Add Department
+        </button>
+      </div>
+
       {/* Departments Table */}
       <div className="table-container">
         <table className="data-table">
@@ -126,7 +123,7 @@ const DepartmentManagement: React.FC = () => {
           </thead>
           <tbody>
             {departments.map(dept => (
-              <tr key={dept.id}>
+              <tr key={dept.id} onClick={(e) => e.stopPropagation()}>
                 <td>{dept.name}</td>
                 <td>{dept.code}</td>
                 <td>{dept.students}</td>
@@ -135,11 +132,17 @@ const DepartmentManagement: React.FC = () => {
                 <td>
                   <div className="action-buttons">
                     <button 
-                      className="icon-btn edit-btn" 
-                      onClick={() => handleEditDepartment(dept)}
+                      className="edit-btn text-btn" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleEditDepartment(dept);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       title="Edit"
+                      type="button"
                     >
-                      <FaEdit />
+                      Edit
                     </button>
                     <button 
                       className="icon-btn assign-btn" 

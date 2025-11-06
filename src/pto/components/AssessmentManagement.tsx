@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { FaClipboardList, FaPlus, FaEdit, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
+import { FaClipboardList, FaPlus, FaCog, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
 
 interface Assessment {
   id: number;
@@ -146,16 +146,6 @@ const AssessmentManagement: React.FC = () => {
 
   return (
     <div className="pto-component-page">
-      <div className="page-header">
-        <h2 className="page-title">
-          <FaClipboardList className="page-icon" />
-          Assessment Management
-        </h2>
-        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
-          <FaPlus /> Create Assessment
-        </button>
-      </div>
-
       {/* Statistics */}
       <div className="stats-grid">
         <div className="stat-card">
@@ -181,6 +171,13 @@ const AssessmentManagement: React.FC = () => {
         </div>
       </div>
 
+      {/* Action Button */}
+      <div className="action-buttons-section">
+        <button className="primary-btn" onClick={() => setIsAddModalOpen(true)}>
+          <FaPlus /> Create Assessment
+        </button>
+      </div>
+
       {/* Assessments Table */}
       <div className="table-container">
         <table className="data-table">
@@ -198,7 +195,7 @@ const AssessmentManagement: React.FC = () => {
           </thead>
           <tbody>
             {assessments.map(assessment => (
-              <tr key={assessment.id}>
+              <tr key={assessment.id} onClick={(e) => e.stopPropagation()}>
                 <td>{assessment.name}</td>
                 <td>{assessment.department}</td>
                 <td>
@@ -231,11 +228,17 @@ const AssessmentManagement: React.FC = () => {
                       <FaEye />
                     </button>
                     <button 
-                      className="icon-btn edit-btn" 
-                      onClick={() => handleEditAssessment(assessment)}
+                      className="edit-btn text-btn" 
+                      onClick={(e) => {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleEditAssessment(assessment);
+                      }}
+                      onMouseDown={(e) => e.stopPropagation()}
                       title="Edit"
+                      type="button"
                     >
-                      <FaEdit />
+                      Edit
                     </button>
                     <button 
                       className="icon-btn delete-btn" 

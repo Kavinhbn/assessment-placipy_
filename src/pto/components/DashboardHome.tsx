@@ -67,9 +67,9 @@ const DashboardHome: React.FC = () => {
   });
 
   return (
-    <div className="pto-dashboard-home">
+    <div className="pto-dashboard-home" style={{ marginTop: 0, paddingTop: 0 }}>
       {/* Welcome Banner */}
-      <div className="welcome-banner">
+      <div className="welcome-banner" style={{ marginTop: 0 }}>
         <div className="welcome-content">
           <div className="welcome-date">{currentDate}</div>
           <h1 className="welcome-title">Welcome back, PTO!</h1>
