@@ -133,11 +133,13 @@ class AdminService {
       const expressionAttributeNames = {};
       const expressionAttributeValues = {};
 
-      Object.keys(updates).forEach((key, index) => {
-        if (key !== 'PK' && key !== 'SK') {
-          updateExpression.push(`#${key} = :val${index}`);
+      let valueIndex = 0;
+      Object.keys(updates).forEach((key) => {
+        if (key !== 'PK' && key !== 'SK' && updates[key] !== undefined) {
+          updateExpression.push(`#${key} = :val${valueIndex}`);
           expressionAttributeNames[`#${key}`] = key;
-          expressionAttributeValues[`:val${index}`] = updates[key];
+          expressionAttributeValues[`:val${valueIndex}`] = updates[key];
+          valueIndex++;
         }
       });
 
@@ -145,6 +147,10 @@ class AdminService {
       updateExpression.push('#updatedAt = :updatedAt');
       expressionAttributeNames['#updatedAt'] = 'updatedAt';
       expressionAttributeValues[':updatedAt'] = new Date().toISOString();
+
+      if (updateExpression.length === 1) {
+        throw new Error('No valid fields to update');
+      }
 
       const params = {
         Key: { PK: pk, SK: 'METADATA' },
@@ -281,6 +287,7 @@ class AdminService {
     try {
       // First find the officer to get the PK
       const officer = await this.findOfficerById(officerId);
+      
       if (!officer) {
         throw new Error('Officer not found');
       }
@@ -289,17 +296,23 @@ class AdminService {
       const expressionAttributeNames = {};
       const expressionAttributeValues = {};
 
-      Object.keys(updates).forEach((key, index) => {
-        if (key !== 'PK' && key !== 'SK') {
-          updateExpression.push(`#${key} = :val${index}`);
+      let valueIndex = 0;
+      Object.keys(updates).forEach((key) => {
+        if (key !== 'PK' && key !== 'SK' && updates[key] !== undefined) {
+          updateExpression.push(`#${key} = :val${valueIndex}`);
           expressionAttributeNames[`#${key}`] = key;
-          expressionAttributeValues[`:val${index}`] = updates[key];
+          expressionAttributeValues[`:val${valueIndex}`] = updates[key];
+          valueIndex++;
         }
       });
 
       updateExpression.push('#updatedAt = :updatedAt');
       expressionAttributeNames['#updatedAt'] = 'updatedAt';
       expressionAttributeValues[':updatedAt'] = new Date().toISOString();
+
+      if (updateExpression.length === 1) {
+        throw new Error('No valid fields to update');
+      }
 
       const params = {
         Key: { PK: officer.PK, SK: officer.SK },
@@ -344,11 +357,9 @@ class AdminService {
     try {
       // Scan for officer across all colleges
       const params = {
-        FilterExpression: 'SK = :officerId AND (begins_with(SK, :ptoPrefix) OR begins_with(SK, :ptsPrefix))',
+        FilterExpression: 'SK = :officerId',
         ExpressionAttributeValues: {
-          ':officerId': officerId,
-          ':ptoPrefix': 'PTO#',
-          ':ptsPrefix': 'PTS#'
+          ':officerId': officerId
         }
       };
 
@@ -563,7 +574,7 @@ class AdminService {
       clientType: item.clientType || 'college',
       createdAt: item.createdAt,
       updatedAt: item.updatedAt,
-      active: true // Default to active
+      active: item.active !== undefined ? item.active : true // Use stored value or default to active
     };
   }
 
@@ -578,7 +589,7 @@ class AdminService {
       collegeId: item.PK,
       collegeName: '', // Will be populated from college data if needed
       permissions: item.permissions || [],
-      status: 'ACTIVE', // Default status
+      status: item.status || 'ACTIVE', // Use stored status or default to ACTIVE
       createdAt: item.createdAt,
       updatedAt: item.updatedAt
     };

@@ -112,16 +112,26 @@ const handleSave = async () => {
   };
 
   const handleToggleStatus = async (id: string) => {
+    const officer = officers.find(off => off.id === id);
+    if (!officer) return;
+    
+    const originalStatus = officer.status;
+    const newStatus = officer.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+    
     try {
-      const officer = officers.find(off => off.id === id);
-      if (!officer) return;
+      // Optimistic update: Update UI immediately
+      setOfficers(officers.map(off => 
+        off.id === id ? { ...off, status: newStatus } : off
+      ));
       
-      const newStatus = officer.status === 'ACTIVE' ? 'INACTIVE' : 'ACTIVE';
+      // Then update backend
       await AdminService.updateOfficer(id, { status: newStatus });
       
-      // Reload data to reflect changes
-      await loadData();
     } catch (err: any) {
+      // If backend fails, revert the optimistic update
+      setOfficers(officers.map(off => 
+        off.id === id ? { ...off, status: originalStatus } : off
+      ));
       setError(err.message || 'Failed to update officer status');
       console.error('Error updating officer status:', err);
     }

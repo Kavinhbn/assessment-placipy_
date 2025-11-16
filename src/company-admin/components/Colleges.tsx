@@ -78,18 +78,28 @@ const Colleges: React.FC = () => {
   };
 
   const handleToggleStatus = async (collegeId: string) => {
-    try {
-      const college = colleges.find(c => c.id === collegeId);
-      if (!college) return;
+    const college = colleges.find(c => c.id === collegeId);
+    if (!college) return;
 
-      const updatedCollege = await AdminService.updateCollege(collegeId, { 
-        active: !college.active 
+    const originalActive = college.active;
+    const newActive = !college.active;
+    
+    try {
+      // Optimistic update: Update UI immediately
+      setColleges(colleges.map(col =>
+        col.id === collegeId ? { ...col, active: newActive } : col
+      ));
+
+      // Then update backend
+      await AdminService.updateCollege(collegeId, { 
+        active: newActive 
       });
       
-      setColleges(colleges.map(col =>
-        col.id === collegeId ? updatedCollege : col
-      ));
     } catch (err: any) {
+      // If backend fails, revert the optimistic update
+      setColleges(colleges.map(col =>
+        col.id === collegeId ? { ...col, active: originalActive } : col
+      ));
       setError(err.message || 'Failed to update college status');
       console.error('Error updating college status:', err);
     }
