@@ -1,30 +1,59 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import AdminService from '../../services/admin.service';
 
 const Reports: React.FC = () => {
-  // Dummy data for charts
-  const collegePerformance = [
-    { name: 'KSR College', students: 850, assessments: 145, completion: 92 },
-    { name: 'SNS College', students: 720, assessments: 132, completion: 88 },
-    { name: 'PSG College', students: 680, assessments: 128, completion: 85 },
-    { name: 'KCT College', students: 590, assessments: 115, completion: 90 },
-    { name: 'Kumaraguru', students: 520, assessments: 98, completion: 87 },
-  ];
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [collegeReports, setCollegeReports] = useState<any[]>([]);
+  const [performanceData, setPerformanceData] = useState<any>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const assessmentStats = [
-    { name: 'Jan', assessments: 45, completions: 1200 },
-    { name: 'Feb', assessments: 52, completions: 1450 },
-    { name: 'Mar', assessments: 48, completions: 1380 },
-    { name: 'Apr', assessments: 61, completions: 1650 },
-    { name: 'May', assessments: 55, completions: 1520 },
-    { name: 'Jun', assessments: 58, completions: 1580 },
-  ];
+  useEffect(() => {
+    loadReportsData();
+  }, []);
 
-  const statusData = [
-    { name: 'Completed', value: 3240, color: '#9768E1' },
-    { name: 'In Progress', value: 450, color: '#E4D5F8' },
-    { name: 'Pending', value: 210, color: '#D0BFE7' },
-  ];
+  const loadReportsData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [colleges, performance] = await Promise.all([
+        AdminService.getCollegeReports(),
+        AdminService.getPerformanceReport()
+      ]);
+
+      setCollegeReports(colleges);
+      setPerformanceData(performance);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load reports data');
+      console.error('Error loading reports:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await loadReportsData();
+    setRefreshing(false);
+  };
+
+  // Process data for charts
+  const collegePerformance = collegeReports.map(college => ({
+    name: college.name,
+    students: college.totalStudents || 0,
+    assessments: college.totalAssessments || 0,
+    completion: college.completionRate || 0
+  }));
+
+  const assessmentStats = performanceData?.monthlyStats || [];
+  
+  const statusData = performanceData?.statusDistribution ? [
+    { name: 'Completed', value: performanceData.statusDistribution.completed || 0, color: '#9768E1' },
+    { name: 'In Progress', value: performanceData.statusDistribution.inProgress || 0, color: '#E4D5F8' },
+    { name: 'Pending', value: performanceData.statusDistribution.pending || 0, color: '#D0BFE7' },
+  ] : [];
 
   const handleExportExcel = () => {
     // In real app, this would generate and download Excel file
@@ -41,6 +70,13 @@ const Reports: React.FC = () => {
       <div className="admin-page-header">
         <h2 className="admin-page-title">Reports & Analytics</h2>
         <div className="admin-export-buttons">
+          <button 
+            className="admin-btn-export" 
+            onClick={handleRefresh}
+            disabled={refreshing}
+          >
+            {refreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
+          </button>
           <button className="admin-btn-export" onClick={handleExportExcel}>
             📊 Export Excel
           </button>
@@ -50,12 +86,27 @@ const Reports: React.FC = () => {
         </div>
       </div>
 
+      {error && (
+        <div className="admin-error">
+          <p>{error}</p>
+          <button onClick={() => setError(null)}>×</button>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="admin-loading">
+          <div className="spinner"></div>
+          <p>Loading reports data...</p>
+        </div>
+      ) : (
+
       <div className="admin-reports-grid">
         {/* College Performance Chart */}
         <div className="admin-chart-card">
           <h3 className="admin-chart-title">College Performance Overview</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <BarChart data={collegePerformance}>
+          {collegePerformance.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={collegePerformance}>
               <CartesianGrid strokeDasharray="3 3" stroke="#D0BFE7" />
               <XAxis dataKey="name" stroke="#523C48" style={{ fontSize: '11px' }} />
               <YAxis stroke="#523C48" style={{ fontSize: '11px' }} />
@@ -72,13 +123,19 @@ const Reports: React.FC = () => {
               <Bar dataKey="assessments" fill="#E4D5F8" radius={[8, 8, 0, 0]} />
             </BarChart>
           </ResponsiveContainer>
+          ) : (
+            <div className="admin-empty-chart">
+              <p>No college performance data available</p>
+            </div>
+          )}
         </div>
 
         {/* Assessment Statistics */}
         <div className="admin-chart-card">
           <h3 className="admin-chart-title">Assessment Statistics (Last 6 Months)</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart data={assessmentStats}>
+          {assessmentStats.length > 0 ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={assessmentStats}>
               <CartesianGrid strokeDasharray="3 3" stroke="#D0BFE7" />
               <XAxis dataKey="name" stroke="#523C48" style={{ fontSize: '11px' }} />
               <YAxis stroke="#523C48" style={{ fontSize: '11px' }} />
@@ -95,13 +152,19 @@ const Reports: React.FC = () => {
               <Line type="monotone" dataKey="completions" stroke="#E4D5F8" strokeWidth={2} />
             </LineChart>
           </ResponsiveContainer>
+          ) : (
+            <div className="admin-empty-chart">
+              <p>No assessment statistics available</p>
+            </div>
+          )}
         </div>
 
         {/* Status Distribution */}
         <div className="admin-chart-card">
           <h3 className="admin-chart-title">Assessment Status Distribution</h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <PieChart>
+          {statusData.length > 0 && statusData.some(item => item.value > 0) ? (
+            <ResponsiveContainer width="100%" height={300}>
+              <PieChart>
               <Pie
                 data={statusData}
                 cx="50%"
@@ -119,6 +182,11 @@ const Reports: React.FC = () => {
               <Tooltip />
             </PieChart>
           </ResponsiveContainer>
+          ) : (
+            <div className="admin-empty-chart">
+              <p>No status distribution data available</p>
+            </div>
+          )}
         </div>
 
         {/* Performance Table - Spans 2 columns */}
@@ -162,12 +230,7 @@ const Reports: React.FC = () => {
         <div className="admin-chart-card">
           <h3 className="admin-chart-title">Top Performing Officers</h3>
           <div className="admin-top-performers">
-            {[
-              { name: 'John Doe', college: 'KSR College', score: 95 },
-              { name: 'Jane Smith', college: 'SNS College', score: 92 },
-              { name: 'Robert Johnson', college: 'PSG College', score: 90 },
-              { name: 'Emily Davis', college: 'KCT College', score: 88 },
-            ].map((officer, index) => (
+            {(performanceData?.topPerformers || []).map((officer: any, index: number) => (
               <div key={index} className="admin-performer-item">
                 <div className="admin-performer-rank">#{index + 1}</div>
                 <div className="admin-performer-info">
@@ -180,6 +243,7 @@ const Reports: React.FC = () => {
           </div>
         </div>
       </div>
+      )}
     </div>
   );
 };
