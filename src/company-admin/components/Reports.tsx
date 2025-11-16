@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import AdminService from '../../services/admin.service';
+import * as XLSX from 'xlsx';
+import jsPDF from 'jspdf';
+import autoTable from 'jspdf-autotable';
 
 const Reports: React.FC = () => {
   const [loading, setLoading] = useState(true);
@@ -8,6 +11,8 @@ const Reports: React.FC = () => {
   const [collegeReports, setCollegeReports] = useState<any[]>([]);
   const [performanceData, setPerformanceData] = useState<any>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [exportingExcel, setExportingExcel] = useState(false);
+  const [exportingPDF, setExportingPDF] = useState(false);
 
   useEffect(() => {
     loadReportsData();
@@ -55,14 +60,210 @@ const Reports: React.FC = () => {
     { name: 'Pending', value: performanceData.statusDistribution.pending || 0, color: '#D0BFE7' },
   ] : [];
 
-  const handleExportExcel = () => {
-    // In real app, this would generate and download Excel file
-    alert('Exporting to Excel... (UI only)');
+  const handleExportExcel = async () => {
+    if (exportingExcel) return;
+    
+    try {
+      setExportingExcel(true);
+      
+      // Create workbook with multiple sheets
+      const wb = XLSX.utils.book_new();
+      
+      // Sheet 1: College Performance Summary
+      const collegeData = collegeReports.map(college => ({
+        'College Name': college.name,
+        'Total Students': college.totalStudents || 0,
+        'Total Assessments': college.totalAssessments || 0,
+        'Completion Rate (%)': Math.round((college.completionRate || 0) * 100),
+        'Active Officers': college.activeOfficers || 0,
+        'Status': college.active ? 'Active' : 'Inactive',
+        'Created Date': college.createdAt ? new Date(college.createdAt).toLocaleDateString() : 'N/A'
+      }));
+      
+      const ws1 = XLSX.utils.json_to_sheet(collegeData);
+      XLSX.utils.book_append_sheet(wb, ws1, 'College Performance');
+      
+      // Sheet 2: Assessment Statistics
+      if (performanceData?.monthlyStats) {
+        const assessmentData = performanceData.monthlyStats.map((stat: any) => ({
+          'Month': stat.month,
+          'Total Assessments': stat.total,
+          'Completed': stat.completed,
+          'Completion Rate (%)': Math.round((stat.completed / stat.total) * 100) || 0
+        }));
+        
+        const ws2 = XLSX.utils.json_to_sheet(assessmentData);
+        XLSX.utils.book_append_sheet(wb, ws2, 'Monthly Stats');
+      }
+      
+      // Sheet 3: Overall Summary
+      const summaryData = [{
+        'Total Colleges': collegeReports.length,
+        'Total Students': collegeReports.reduce((sum, c) => sum + (c.totalStudents || 0), 0),
+        'Total Assessments': collegeReports.reduce((sum, c) => sum + (c.totalAssessments || 0), 0),
+        'Average Completion Rate (%)': Math.round(
+          collegeReports.reduce((sum, c) => sum + (c.completionRate || 0), 0) / collegeReports.length * 100
+        ) || 0,
+        'Generated On': new Date().toLocaleString()
+      }];
+      
+      const ws3 = XLSX.utils.json_to_sheet(summaryData);
+      XLSX.utils.book_append_sheet(wb, ws3, 'Summary');
+      
+      // Generate filename with timestamp
+      const fileName = `Assessment_Reports_${new Date().toISOString().split('T')[0]}.xlsx`;
+      
+      // Download the file
+      XLSX.writeFile(wb, fileName);
+      
+      alert('Excel report exported successfully!');
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      alert('Failed to export Excel report. Please try again.');
+    } finally {
+      setExportingExcel(false);
+    }
   };
 
-  const handleExportPDF = () => {
-    // In real app, this would generate and download PDF file
-    alert('Exporting to PDF... (UI only)');
+  const handleExportPDF = async () => {
+    if (exportingPDF) return;
+    
+    try {
+      setExportingPDF(true);
+      
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const margin = 20;
+      let yPosition = margin;
+      
+      // Title
+      pdf.setFontSize(20);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Assessment Platform - Reports', pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 15;
+      
+      // Date
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      pdf.text(`Generated on: ${new Date().toLocaleString()}`, pageWidth / 2, yPosition, { align: 'center' });
+      yPosition += 20;
+      
+      // Summary Section
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('Summary', margin, yPosition);
+      yPosition += 10;
+      
+      pdf.setFontSize(12);
+      pdf.setFont('helvetica', 'normal');
+      const summaryText = [
+        `Total Colleges: ${collegeReports.length}`,
+        `Total Students: ${collegeReports.reduce((sum, c) => sum + (c.totalStudents || 0), 0)}`,
+        `Total Assessments: ${collegeReports.reduce((sum, c) => sum + (c.totalAssessments || 0), 0)}`,
+        `Average Completion Rate: ${Math.round(
+          collegeReports.reduce((sum, c) => sum + (c.completionRate || 0), 0) / collegeReports.length * 100
+        )}%`
+      ];
+      
+      summaryText.forEach(text => {
+        pdf.text(text, margin, yPosition);
+        yPosition += 8;
+      });
+      
+      yPosition += 10;
+      
+      // College Performance Table
+      pdf.setFontSize(16);
+      pdf.setFont('helvetica', 'bold');
+      pdf.text('College Performance', margin, yPosition);
+      yPosition += 10;
+      
+      const tableColumns = ['College Name', 'Students', 'Assessments', 'Completion %', 'Status'];
+      const tableRows = collegeReports.map(college => [
+        college.name,
+        (college.totalStudents || 0).toString(),
+        (college.totalAssessments || 0).toString(),
+        `${Math.round((college.completionRate || 0) * 100)}%`,
+        college.active ? 'Active' : 'Inactive'
+      ]);
+      
+      // Add table using autoTable
+      autoTable(pdf, {
+        head: [tableColumns],
+        body: tableRows,
+        startY: yPosition,
+        margin: { left: margin, right: margin },
+        styles: {
+          fontSize: 10,
+          cellPadding: 3,
+        },
+        headStyles: {
+          fillColor: [41, 128, 185],
+          textColor: 255,
+          fontStyle: 'bold'
+        },
+        alternateRowStyles: {
+          fillColor: [245, 245, 245]
+        }
+      });
+      
+      // Check if we need a new page for monthly stats
+      const finalY = (pdf as any).lastAutoTable?.finalY || yPosition + 50;
+      if (finalY > 200) {
+        pdf.addPage();
+        yPosition = margin;
+      } else {
+        yPosition = finalY + 20;
+      }
+      
+      // Monthly Statistics (if available)
+      if (performanceData?.monthlyStats && performanceData.monthlyStats.length > 0) {
+        pdf.setFontSize(16);
+        pdf.setFont('helvetica', 'bold');
+        pdf.text('Monthly Assessment Statistics', margin, yPosition);
+        yPosition += 10;
+        
+        const monthlyColumns = ['Month', 'Total Assessments', 'Completed', 'Completion Rate'];
+        const monthlyRows = performanceData.monthlyStats.map((stat: any) => [
+          stat.month,
+          stat.total.toString(),
+          stat.completed.toString(),
+          `${Math.round((stat.completed / stat.total) * 100) || 0}%`
+        ]);
+        
+        autoTable(pdf, {
+          head: [monthlyColumns],
+          body: monthlyRows,
+          startY: yPosition,
+          margin: { left: margin, right: margin },
+          styles: {
+            fontSize: 10,
+            cellPadding: 3,
+          },
+          headStyles: {
+            fillColor: [52, 152, 219],
+            textColor: 255,
+            fontStyle: 'bold'
+          },
+          alternateRowStyles: {
+            fillColor: [245, 245, 245]
+          }
+        });
+      }
+      
+      // Generate filename with timestamp
+      const fileName = `Assessment_Reports_${new Date().toISOString().split('T')[0]}.pdf`;
+      
+      // Download the PDF
+      pdf.save(fileName);
+      
+      alert('PDF report exported successfully!');
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      alert('Failed to export PDF report. Please try again.');
+    } finally {
+      setExportingPDF(false);
+    }
   };
 
   return (
@@ -77,11 +278,19 @@ const Reports: React.FC = () => {
           >
             {refreshing ? '🔄 Refreshing...' : '🔄 Refresh'}
           </button>
-          <button className="admin-btn-export" onClick={handleExportExcel}>
-            📊 Export Excel
+          <button 
+            className="admin-btn-export" 
+            onClick={handleExportExcel}
+            disabled={exportingExcel || loading}
+          >
+            {exportingExcel ? '📊 Exporting...' : '📊 Export Excel'}
           </button>
-          <button className="admin-btn-export" onClick={handleExportPDF}>
-            📄 Export PDF
+          <button 
+            className="admin-btn-export" 
+            onClick={handleExportPDF}
+            disabled={exportingPDF || loading}
+          >
+            {exportingPDF ? '📄 Exporting...' : '📄 Export PDF'}
           </button>
         </div>
       </div>
