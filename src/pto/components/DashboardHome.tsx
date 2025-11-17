@@ -6,6 +6,7 @@ import {
   FaCalendarAlt
 } from 'react-icons/fa';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
+import PTOService from '../../services/pto.service';
 
 const DashboardHome: React.FC = () => {
   const [stats, setStats] = useState({
@@ -16,33 +17,27 @@ const DashboardHome: React.FC = () => {
     completedToday: 0
   });
   const [departmentPerformanceData, setDepartmentPerformanceData] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
-  const [assessments, setAssessments] = useState<Array<{ id: number; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' }>>([]);
+  const [assessments, setAssessments] = useState<Array<{ id: string; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' }>>([]);
 
-  // Simulate loading data dynamically
   useEffect(() => {
-    const loadStats = () => {
+    const load = async () => {
+      const data = await PTOService.getDashboard();
       setStats({
-        totalAssessments: 24,
-        activeAssessments: 8,
-        totalStudents: 1560,
-        totalDepartments: 5,
-        completedToday: 23
+        totalAssessments: data.totalAssessments,
+        activeAssessments: data.activeAssessments,
+        totalStudents: data.totalStudents,
+        totalDepartments: data.totalDepartments,
+        completedToday: 0
       });
-      setDepartmentPerformanceData([
-        { name: 'CS', students: 450, avgScore: 82, completed: 380 },
-        { name: 'ECE', students: 380, avgScore: 75, completed: 320 },
-        { name: 'ME', students: 420, avgScore: 79, completed: 360 },
-        { name: 'CE', students: 310, avgScore: 73, completed: 280 },
-      ]);
-      setAssessments([
-        { id: 1, title: 'JavaScript Fundamentals', subject: 'CSE', startTime: '2025-11-15 10:00 AM', duration: '60 mins', status: 'ongoing' },
-        { id: 2, title: 'Data Structures Quiz', subject: 'IT', startTime: '2025-11-20 02:00 PM', duration: '45 mins', status: 'upcoming' },
-        { id: 3, title: 'Circuit Theory Test', subject: 'ECE', startTime: '2025-11-16 11:00 AM', duration: '90 mins', status: 'ongoing' },
-        { id: 4, title: 'Thermodynamics Midterm', subject: 'ME', startTime: '2025-11-25 09:00 AM', duration: '120 mins', status: 'upcoming' },
-      ]);
+      setDepartmentPerformanceData(
+        data.departmentPerformance.map(d => ({ name: d.code || d.name, students: d.students, avgScore: d.avgScore, completed: d.completed }))
+      );
+      type AssessmentCard = { id: string; title: string; subject: string; startTime: string; duration: string; status: 'ongoing' | 'upcoming' };
+      const ongoingCards: AssessmentCard[] = data.ongoingTests.map((t: any) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'ongoing' }));
+      const upcomingCards: AssessmentCard[] = data.upcomingTests.map((t: any) => ({ id: t.id, title: t.name, subject: t.department || 'All', startTime: t.date || '', duration: `${t.duration || 0} mins`, status: 'upcoming' }));
+      setAssessments([...ongoingCards, ...upcomingCards]);
     };
-
-    setTimeout(loadStats, 500);
+    load();
   }, []);
 
   // KPI Cards matching PRD overview

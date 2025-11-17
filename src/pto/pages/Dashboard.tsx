@@ -29,7 +29,7 @@ const PTODashboard: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState("dashboard");
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [currentSectionName, setCurrentSectionName] = useState("Dashboard");
+  
 
 
   /* ✅ Nav Items */
@@ -63,7 +63,6 @@ const PTODashboard: React.FC = () => {
     });
 
     setActiveTab(matchedItem ? matchedItem.id : "dashboard");
-    setCurrentSectionName(matchedItem ? matchedItem.label : "Dashboard");
   }, [location, navItems]);
 
   /* ✅ Logout */

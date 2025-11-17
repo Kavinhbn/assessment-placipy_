@@ -1,20 +1,16 @@
-import React, { useState } from 'react';
-import { FaChartBar, FaChartLine, FaFileExcel, FaFilePdf, FaDownload, FaFilter } from 'react-icons/fa';
+import React, { useEffect, useState } from 'react';
+import { FaFileExcel, FaFilePdf, FaFilter } from 'react-icons/fa';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line } from 'recharts';
+import PTOService from '../../services/pto.service';
 
 const ReportsAnalytics: React.FC = () => {
   const [selectedDepartment, setSelectedDepartment] = useState('all');
   const [reportType, setReportType] = useState('department');
 
-  const departments = ['all', 'Computer Science', 'Electronics', 'Mechanical', 'Civil'];
+  const [departments, setDepartments] = useState<string[]>(['all']);
 
   // Mock data for charts
-  const departmentPerformanceData = [
-    { name: 'CS', students: 450, avgScore: 82, completed: 380 },
-    { name: 'ECE', students: 380, avgScore: 75, completed: 320 },
-    { name: 'ME', students: 420, avgScore: 79, completed: 360 },
-    { name: 'CE', students: 310, avgScore: 73, completed: 280 },
-  ];
+  const [departmentPerformanceData, setDeptPerf] = useState<Array<{ name: string; students: number; avgScore: number; completed: number }>>([]);
 
   const studentAnalyticsData = [
     { name: 'Week 1', accuracy: 75, attempts: 120 },
@@ -29,6 +25,22 @@ const ReportsAnalytics: React.FC = () => {
     { assessment: 'Test 3', total: 450, attended: 395, completion: 88 },
     { assessment: 'Test 4', total: 450, attended: 340, completion: 76 },
   ];
+
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const dash = await PTOService.getDashboard();
+        const perf = dash.departmentPerformance.map(d => ({ name: d.code || d.name, students: d.students, avgScore: d.avgScore, completed: d.completed }));
+        setDeptPerf(perf);
+        setDepartments(['all', ...Array.from(new Set(perf.map(p => p.name)))]);
+      } catch (e: any) {
+        console.error(e);
+      } finally {
+        // no-op
+      }
+    };
+    load();
+  }, []);
 
   const topPerformers = [
     { rank: 1, name: 'Alice Johnson', department: 'CS', score: 95, tests: 5 },
@@ -199,7 +211,7 @@ const ReportsAnalytics: React.FC = () => {
 
   const filteredData = selectedDepartment === 'all' 
     ? departmentPerformanceData 
-    : departmentPerformanceData.filter(d => d.name === selectedDepartment.substring(0, 3));
+    : departmentPerformanceData.filter(d => d.name === selectedDepartment);
 
   return (
     <div className="pto-component-page">

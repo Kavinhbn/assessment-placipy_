@@ -382,6 +382,8 @@
   border-radius: 25px;
   font-size: 0.95rem;
   transition: all 0.3s ease;
+  background-color: #ffffff !important;
+  color: #333333 !important;
 }
 
 .search-input:focus {
@@ -1336,6 +1338,8 @@
   font-size: 0.95rem;
   transition: all 0.3s ease;
   font-family: inherit;
+  background-color: #ffffff !important;
+  color: #333333 !important;
 }
 
 .form-group input:focus,
@@ -1508,6 +1512,8 @@
   border-radius: 8px;
   font-size: 0.95rem;
   transition: all 0.3s ease;
+  background-color: #ffffff !important;
+  color: #333333 !important;
 }
 
 .search-box input:focus,
@@ -1567,10 +1573,15 @@
   cursor: pointer;
 }
 
-.permission-item input[type="checkbox"] {
+.permission-item input[type="checkbox"],
+.notification-item input[type="checkbox"] {
   width: 20px;
   height: 20px;
   cursor: pointer;
+  background-color: #ffffff !important;
+  border: 2px solid #000000 !important;
+  border-radius: 4px;
+  accent-color: var(--primary-purple);
 }
 
 .permission-item span {
@@ -1661,7 +1672,9 @@
 
 .filter-group select {
   padding: 10px 15px;
-  border: 2px solid var(--light-purple);
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
   border-radius: 8px;
   font-size: 0.95rem;
 }
@@ -2595,10 +2608,13 @@
     width: 100%;
   }
   
-  .search-box input,
-  .filter-box select {
-    width: 100%;
-  }
+.search-box input,
+.filter-box select {
+  width: 100%;
+  background-color: #ffffff !important;
+  color: #000000 !important;
+  border: 2px solid #000000 !important;
+}
   
   .filters-section {
     flex-direction: column;
@@ -2915,5 +2931,18 @@
     user-select: none;
     -webkit-tap-highlight-color: rgba(151, 104, 225, 0.2);
   }
+}
+
+.pto-component-page input[type="checkbox"],
+.modal-content input[type="checkbox"],
+.permissions-section input[type="checkbox"],
+.permission-item input[type="checkbox"],
+.notification-item input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  background-color: #ffffff !important;
+  border: 2px solid #000000 !important;
+  border-radius: 4px;
+  accent-color: var(--primary-purple);
 }
 
