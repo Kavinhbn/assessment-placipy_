@@ -92,6 +92,11 @@ const handleSave = async () => {
     });
   };
 
+  const getCollegeName = (collegeId: string): string => {
+    const college = colleges.find(c => c.id === collegeId);
+    return college ? college.name : 'Unknown College';
+  };
+
   const handleEdit = (officer: Officer) => {
     setEditingOfficer(officer);
     setFormData({
@@ -212,7 +217,7 @@ const handleSave = async () => {
               <tr key={officer.id}>
                 <td>{officer.name}</td>
                 <td>{officer.email}</td>
-                <td>{officer.collegeName}</td>
+                <td>{getCollegeName(officer.collegeId)}</td>
                 <td>
                   <span className={`admin-role-badge ${getRoleColor(officer.role)}`}>
                     {officer.role}
