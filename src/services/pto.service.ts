@@ -1,6 +1,9 @@
+
 import axios from 'axios';
 
-const API_BASE_URL = '/api/pto';
+const API_BASE_URL = (typeof import.meta !== 'undefined' && (import.meta as any).env?.VITE_PTO_BASE_URL)
+  ? (import.meta as any).env.VITE_PTO_BASE_URL
+  : '/api/pto';
 
 const api = axios.create({
   baseURL: API_BASE_URL,
@@ -10,8 +13,6 @@ const api = axios.create({
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
   if (token) config.headers.Authorization = `Bearer ${token}`;
-  const email = localStorage.getItem('userEmail');
-  if (email) (config.headers as any)['X-User-Email'] = email;
   return config;
 });
 

@@ -2,10 +2,34 @@
 const DynamoDBService = require('./DynamoDBService');
 const { registerUser, addUserToGroup } = require('../auth/cognito');
 const { v4: uuidv4 } = require('uuid');
+const { CognitoIdentityProviderClient, AdminDisableUserCommand, AdminCreateUserCommand, AdminSetUserPasswordCommand, AdminUpdateUserAttributesCommand } = require('@aws-sdk/client-cognito-identity-provider');
+const { fromEnv } = require('@aws-sdk/credential-providers');
 
 class PTOService {
   constructor() {
     this.dynamoService = new DynamoDBService(process.env.DYNAMODB_TABLE_NAME || 'Assesment_placipy');
+    this.cognitoClient = new CognitoIdentityProviderClient({
+      region: process.env.COGNITO_REGION || process.env.AWS_REGION || 'us-east-1',
+      credentials: fromEnv()
+    });
+  }
+
+  async updateCognitoAttributes(username, { firstName, lastName, fullName, role, department, email }) {
+    const attrs = [];
+    if (email) attrs.push({ Name: 'email', Value: email });
+    if (fullName) attrs.push({ Name: 'name', Value: fullName });
+    if (firstName) attrs.push({ Name: 'given_name', Value: firstName });
+    if (lastName) attrs.push({ Name: 'family_name', Value: lastName });
+    if (role) attrs.push({ Name: 'custom:role', Value: role });
+    if (department) attrs.push({ Name: 'custom:department', Value: department });
+    if (!attrs.length) return;
+    try {
+      await this.cognitoClient.send(new AdminUpdateUserAttributesCommand({
+        UserPoolId: process.env.COGNITO_USER_POOL_ID,
+        Username: username,
+        UserAttributes: attrs
+      }));
+    } catch (_) {}
   }
 
   clientPkFromEmail(email) {
@@ -181,12 +205,31 @@ class PTOService {
     try {
       const username = finalEmail;
       const defaultPassword = 'Praskla@123';
-      await registerUser(username, defaultPassword, finalEmail);
-      try {
-        await addUserToGroup(username, 'instructor');
-      } catch (groupErr) {
-        console.warn('Failed to add user to Cognito group instructor:', groupErr?.message || groupErr);
-      }
+      await this.cognitoClient.send(new AdminCreateUserCommand({
+        UserPoolId: process.env.COGNITO_USER_POOL_ID,
+        Username: username,
+        TemporaryPassword: defaultPassword,
+        UserAttributes: [
+          { Name: 'email', Value: finalEmail },
+          { Name: 'email_verified', Value: 'true' }
+        ],
+        MessageAction: 'SUPPRESS'
+      }));
+      await this.cognitoClient.send(new AdminSetUserPasswordCommand({
+        UserPoolId: process.env.COGNITO_USER_POOL_ID,
+        Username: username,
+        Password: defaultPassword,
+        Permanent: true
+      }));
+      await this.updateCognitoAttributes(username, {
+        firstName: item.firstName,
+        lastName: item.lastName,
+        fullName: item.name,
+        role: item.role,
+        department: item.department,
+        email: item.email
+      });
+      try { await addUserToGroup(username, 'instructor'); } catch (_) {}
     } catch (cogErr) {
       throw new Error('Cognito registration failed: ' + (cogErr?.message || cogErr));
     }
@@ -196,6 +239,7 @@ class PTOService {
 
   async updateStaff(email, id, updates) {
     const pk = this.clientPkFromEmail(email);
+    const current = await this.dynamoService.getItem({ Key: { PK: pk, SK: id } });
     const params = {
       Key: { PK: pk, SK: id },
       UpdateExpression: '',
@@ -206,14 +250,63 @@ class PTOService {
     const expression = [];
     let idx = 0;
     Object.keys(updates || {}).forEach(k => {
-      if (k === 'firstName' || k === 'lastName') return;
+      if (k === 'firstName' || k === 'lastName' || k === 'email') return;
       expression.push(`#${k} = :v${idx}`);
       params.ExpressionAttributeNames[`#${k}`] = k;
       params.ExpressionAttributeValues[`:v${idx}`] = updates[k];
       idx++;
     });
+    if (updates && updates.email) {
+      const clientDomain = (email || '').split('@')[1] || '';
+      const provided = String(updates.email || '').trim();
+      const localPart = provided.includes('@') ? provided.split('@')[0] : provided;
+      const newFinalEmail = `${localPart}@${clientDomain}`.toLowerCase();
+      const oldEmail = current?.Item?.email || '';
+      params.ExpressionAttributeValues[`:v${idx}`] = newFinalEmail;
+      params.ExpressionAttributeNames[`#email`] = 'email';
+      expression.push(`#email = :v${idx}`);
+      idx++;
+      if (newFinalEmail && oldEmail && newFinalEmail !== oldEmail) {
+        try {
+          await this.cognitoClient.send(new AdminDisableUserCommand({
+            UserPoolId: process.env.COGNITO_USER_POOL_ID,
+            Username: oldEmail
+          }));
+        } catch (e) {}
+        {
+          const username = newFinalEmail;
+          const defaultPassword = 'Praskla@123';
+          let createErrMsg = '';
+          try {
+            await this.cognitoClient.send(new AdminCreateUserCommand({
+              UserPoolId: process.env.COGNITO_USER_POOL_ID,
+              Username: username,
+              TemporaryPassword: defaultPassword,
+              UserAttributes: [
+                { Name: 'email', Value: newFinalEmail },
+                { Name: 'email_verified', Value: 'true' }
+              ],
+              MessageAction: 'SUPPRESS'
+            }));
+          } catch (e) {
+            createErrMsg = (e && e.message) ? e.message : '';
+            if (!/exists/i.test(createErrMsg)) {
+              throw new Error('Cognito re-provision failed: ' + createErrMsg);
+            }
+          }
+          try {
+            await this.cognitoClient.send(new AdminSetUserPasswordCommand({
+              UserPoolId: process.env.COGNITO_USER_POOL_ID,
+              Username: username,
+              Password: defaultPassword,
+              Permanent: true
+            }));
+          } catch (_) {}
+          try { await addUserToGroup(username, 'instructor'); } catch (_) {}
+        }
+        }
+      }
     if (updates.firstName || updates.lastName) {
-      const current = await this.dynamoService.getItem({ Key: { PK: pk, SK: id } });
       const newFirst = updates.firstName ?? (current?.Item?.firstName || '');
       const newLast = updates.lastName ?? (current?.Item?.lastName || '');
       const combined = [newFirst, newLast].filter(Boolean).join(' ').trim();
@@ -232,7 +325,26 @@ class PTOService {
     params.ExpressionAttributeValues[':updatedAt'] = new Date().toISOString();
     params.UpdateExpression = `SET ${expression.join(', ')}`;
     const res = await this.dynamoService.updateItem(params);
-    return res.Attributes;
+
+    const updated = res.Attributes || {};
+    let usernameForUpdate = updated.email || (current?.Item?.email || '');
+    // If email changed above, ensure using new email
+    if (updates && updates.email) {
+      const clientDomain = (email || '').split('@')[1] || '';
+      const provided = String(updates.email || '').trim();
+      const localPart = provided.includes('@') ? provided.split('@')[0] : provided;
+      usernameForUpdate = `${localPart}@${clientDomain}`.toLowerCase();
+    }
+    await this.updateCognitoAttributes(usernameForUpdate, {
+      firstName: updated.firstName,
+      lastName: updated.lastName,
+      fullName: updated.name,
+      role: updated.role,
+      department: updated.department,
+      email: updated.email
+    });
+
+    return updated;
   }
 
   async deleteStaff(email, id) {

@@ -6,14 +6,20 @@ const PTOService = require('../services/PTOService');
 const router = express.Router();
 const ptoService = new PTOService();
 
-router.use(authMiddleware.authenticateToken);
+if (process.env.DEV_ALLOW_PTO_NOAUTH === 'true') {
+  // Skip authentication in development when explicitly enabled
+  // All requests will be treated as coming from DEV_PTO_EMAIL
+} else {
+  router.use(authMiddleware.authenticateToken);
+}
 
 function getEmail(req) {
   const u = req.user || {};
   const headerEmail = String(req.headers['x-user-email'] || req.headers['X-User-Email'] || '').trim();
   const fromUsername = (u.username && u.username.includes('@')) ? u.username : '';
   const fromCognitoUsername = (u['cognito:username'] && u['cognito:username'].includes('@')) ? u['cognito:username'] : '';
-  return u.email || fromUsername || fromCognitoUsername || headerEmail || '';
+  const fallback = process.env.DEV_PTO_EMAIL || 'pto@ksrce.ac.in';
+  return u.email || fromUsername || fromCognitoUsername || headerEmail || fallback;
 }
 
 router.get('/dashboard', async (req, res) => {
