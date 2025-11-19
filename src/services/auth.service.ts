@@ -1,7 +1,7 @@
 import axios from 'axios';
 
 // Define user roles
-export type UserRole = 'Student' | 'PTO' | 'PTS' | 'Admin';
+export type UserRole = 'Student' | 'Placement Training Officer' | 'Placement Training Staff' | 'Administrator';
 
 // Define user interface
 export interface User {
@@ -42,20 +42,20 @@ class AuthService {
             case 'pto':
             case 'placement training officer':
             case 'placementtrainingofficer':
-                return 'PTO';
+                return 'Placement Training Officer';
             case 'pts':
             case 'placement training staff':
             case 'placementtrainingstaff':
             case 'placement tracking supervisor':
             case 'placementtrackingsupervisor':
-                return 'PTS';
+                return 'Placement Training Staff';
             case 'admin':
             case 'administrator':
-                return 'Admin';
+                return 'Administrator';
             default:
                 // If we can't match, return the role as-is (will be validated elsewhere)
                 // This maintains backward compatibility
-                if (['Student', 'PTO', 'PTS', 'Admin'].includes(role)) {
+                if (['Student', 'Placement Training Officer', 'Placement Training Staff', 'Administrator'].includes(role)) {
                     return role as UserRole;
                 }
                 // Default to Student if we can't determine the role
@@ -293,7 +293,7 @@ class AuthService {
             const normalizedRole = this.normalizeRole(role);
 
             // Validate role (this is now redundant but kept for safety)
-            const validRoles: UserRole[] = ['Student', 'PTO', 'PTS', 'Admin'];
+            const validRoles: UserRole[] = ['Student', 'Placement Training Officer', 'Placement Training Staff', 'Administrator'];
             if (!validRoles.includes(normalizedRole)) {
                 throw new Error(`Invalid user role: ${role}`);
             }
@@ -326,7 +326,7 @@ class AuthService {
 
                 throw new Error(`Profile verification failed: ${message} (${error.response.status})`);
             } else if (error.request) {
-                throw new Error('Network error: Could not connect to the server for profile verification. Please ensure the backend is running on port 3001.');
+                throw new Error('Network error: Could not connect to the server for profile verification. Please ensure the backend is running on port 3000.');
             } else {
                 throw new Error('Profile verification failed: ' + error.message);
             }
@@ -349,6 +349,15 @@ class AuthService {
     clearCache(): void {
         this.userProfileCache = null;
         this.pendingProfileRequest = null;
+    }
+
+    /**
+     * Get dashboard URL based on user role
+     * @param role User role
+     * @returns Dashboard URL path
+     */
+    getDashboardPath(role: UserRole): string {
+        return this.getDashboardUrl(role);
     }
 
     /**
@@ -381,18 +390,18 @@ class AuthService {
      * @param role User role
      * @returns Dashboard path
      */
-    getDashboardPath(role: UserRole): string {
+    private getDashboardUrl(role: UserRole): string {
         switch (role) {
             case 'Student':
                 return '/student';
-            case 'PTO':
+            case 'Placement Training Officer':
                 return '/pto';
-            case 'PTS':
+            case 'Placement Training Staff':
                 return '/pts';
-            case 'Admin':
+            case 'Administrator':
                 return '/company-admin';
             default:
-                return '/'; // Redirect to login for unknown roles
+                return '/';
         }
     }
 }
