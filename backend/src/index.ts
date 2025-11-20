@@ -9,7 +9,7 @@ dotenv.config();
 const app = require('./app');
 
 // Use port from environment or default to 3005
-const PORT = process.env.PORT ;
+const PORT = process.env.PORT || 3005;
 
 
 app.listen(PORT, () => {

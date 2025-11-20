@@ -142,7 +142,6 @@ async function loginUser(username, password, newPassword = null, session = null)
             const command = new RespondToAuthChallengeCommand(params);
             const result = await cognitoClient.send(command);
 
-            // Return relevant information
             return {
                 accessToken: result.AuthenticationResult?.AccessToken,
                 refreshToken: result.AuthenticationResult?.RefreshToken,
@@ -171,7 +170,6 @@ async function loginUser(username, password, newPassword = null, session = null)
             const command = new InitiateAuthCommand(params);
             const result = await cognitoClient.send(command);
 
-            // Return relevant information
             return {
                 accessToken: result.AuthenticationResult?.AccessToken,
                 refreshToken: result.AuthenticationResult?.RefreshToken,
