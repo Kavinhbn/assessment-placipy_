@@ -158,7 +158,7 @@ class AuthService {
             if (!userData || typeof userData !== 'object') {
                 throw new Error('Malformed profile response: missing user information');
             }
-            const { email, name, role, department, year, joiningDate } = userData;
+            const { email, name, role, department, year, joiningDate } = userData.user;
             const normalizedRole = this.normalizeRole(role);
             const validRoles: UserRole[] = ['Student', 'Placement Training Officer', 'Placement Training Staff', 'Administrator'];
             if (!validRoles.includes(normalizedRole)) {
