@@ -6,7 +6,7 @@ const assessmentService = require('../services/AssessmentService');
 const router = express.Router();
 
 // All assessment routes are protected by authentication
-// Some routes require specific roles
+// Some routes require specific roles+
 
 // Get all assessments (student, instructor, admin)
 router.get('/', authMiddleware.authenticateToken, async (req, res) => {
@@ -66,8 +66,33 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         console.log('Body:', req.body);
         
         const assessmentData = req.body;
-        const createdBy = req.user.username || req.user.sub;
+        // Separate email and name fields
+        const createdBy = req.user.email || req.user['cognito:username'] || req.user.username || req.user.sub;
+        // Try multiple possible fields for the user's name
+        const createdByName = req.user.name || 
+                             (req.user.given_name && req.user.family_name ? `${req.user.given_name} ${req.user.family_name}` : null) ||
+                             req.user.given_name ||
+                             req.user.family_name ||
+                             req.user['cognito:username'] || 
+                             req.user.username || 
+                             req.user.sub;
+            
+        console.log('Extracted createdBy (email):', createdBy);
+        console.log('Extracted createdByName:', createdByName);
+            
+        // Add the createdByName to the assessment data
+        assessmentData.createdByName = createdByName;
         
+        // Log the complete assessment data before sending to service
+        console.log('Complete assessment data being sent to service:', JSON.stringify(assessmentData, null, 2));
+        
+        // Log specific scheduling data
+        console.log('Scheduling data:', {
+            startDate: assessmentData.startDate,
+            endDate: assessmentData.endDate,
+            timezone: assessmentData.timezone
+        });
+            
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
         res.status(201).json({
             success: true,
@@ -92,21 +117,33 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         
         const { id } = req.params;
         const assessmentData = req.body;
-        const updatedBy = req.user.username || req.user.sub;
-        
-        const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
-        res.status(200).json({
-            success: true,
-            data: result
-        });
-    } catch (error: any) {
-        console.error('Error updating assessment:', error);
-        res.status(500).json({
-            success: false,
-            message: error.message || 'Failed to update assessment'
-        });
-    }
-});
+        // Separate email and name fields
+        const updatedBy = req.user.email || req.user['cognito:username'] || req.user.username || req.user.sub;
+        // Try multiple possible fields for the user's name
+        const updatedByName = req.user.name || 
+                             (req.user.given_name && req.user.family_name ? `${req.user.given_name} ${req.user.family_name}` : null) ||
+                             req.user.given_name ||
+                             req.user.family_name ||
+                             req.user['cognito:username'] || 
+                             req.user.username || 
+                             req.user.sub;
+            
+            // Add the updatedByName to the assessment data
+            assessmentData.updatedByName = updatedByName;
+            
+            const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
+            res.status(200).json({
+                success: true,
+                data: result
+            });
+        } catch (error: any) {
+            console.error('Error updating assessment:', error);
+            res.status(500).json({
+                success: false,
+                message: error.message || 'Failed to update assessment'
+            });
+        }
+    });
 
 // Delete an assessment (no role restrictions)
 router.delete('/:id', authMiddleware.authenticateToken, async (req, res) => {

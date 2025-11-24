@@ -1,20 +1,28 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import AssessmentService from "../services/assessment.service";
 
 interface TestCase {
   id: string;
   input: string;
   expectedOutput: string;
-  marks: number;
 }
 
 interface Question {
   id: number;
   text: string;
   options: string[];
-  correctAnswer: number;
+  correctAnswer: number | string | string[]; // Updated to support array format
   marks: number;
   testCases?: TestCase[]; // Add test cases for programming questions
+  subcategory?: string; // Add subcategory (replacing mcqSubcategory)
+  language?: string; // Add language field for programming questions
+  starterCode?: string; // Add starter code for programming questions
+  questionId?: string; // Add questionId to match backend format
+  questionNumber?: number; // Add questionNumber to match backend format
+  points?: number; // Add points to match backend format
+  difficulty?: string; // Add difficulty to match backend format
+  entityType?: string; // Add entityType to match backend format
+  category?: string; // Add category to match backend format
 }
 
 interface ReferenceMaterial {
@@ -28,15 +36,43 @@ interface AssessmentData {
   title: string;
   description: string;
   duration: number;
-  totalMarks: number;
   instructions: string;
   department: string;
   difficulty: string;
-  category: string;
-  mcqSubcategory: string; // Add subcategory field
-  negativeMarking: number; // Add negative marking field
+  category: string[];
   questions: Question[];
-  referenceMaterials: ReferenceMaterial[]; // Add reference materials field
+  referenceMaterials: ReferenceMaterial[];
+  status: string;
+  // Add new fields to match the sample structure
+  type: string;
+  domain: string;
+  configuration: {
+    maxAttempts: number;
+    passingScore: number;
+    randomizeQuestions: boolean;
+    totalQuestions: number;
+  };
+  scheduling: {
+    startDate: string;
+    endDate: string;
+    timezone: string;
+  };
+  target: {
+    departments: string[];
+    years: number[];
+  };
+  stats: {
+    avgScore: number;
+    completed: number;
+    highestScore: number;
+    totalParticipants: number;
+  };
+  entities: Array<{
+    type: string;
+    subcategories?: string[];
+    description?: string;
+  }>;
+  isPublished: boolean;
 }
 
 const AssessmentCreation: React.FC = () => {
@@ -44,23 +80,55 @@ const AssessmentCreation: React.FC = () => {
     title: "",
     description: "",
     duration: 60,
-    totalMarks: 100,
     instructions: "",
     department: "",
-    difficulty: "medium",
-    category: "",
-    mcqSubcategory: "", // Initialize subcategory
-    negativeMarking: 0, // Initialize negative marking
+    difficulty: "",
+    category: ["MCQ", "Coding"], // Initialize with both categories
     questions: [],
-    referenceMaterials: [] // Initialize reference materials
+    referenceMaterials: [],
+    status: "ACTIVE",
+    type: "DEPARTMENT_WISE",
+    domain: "ksrce.ac.in",
+    configuration: {
+      maxAttempts: 2,
+      passingScore: 60,
+      randomizeQuestions: true,
+      totalQuestions: 0
+    },
+    scheduling: {
+      startDate: new Date().toISOString(),
+      endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      timezone: "Asia/Kolkata"
+    },
+    target: {
+      departments: [],
+      years: [3, 4]
+    },
+    stats: {
+      avgScore: 0,
+      completed: 0,
+      highestScore: 0,
+      totalParticipants: 0
+    },
+    entities: [],
+    isPublished: false
   });
 
   const [currentQuestion, setCurrentQuestion] = useState<Question>({
     id: 0,
     text: "",
     options: ["", "", "", ""],
-    correctAnswer: 0,
-    marks: 1
+    correctAnswer: [], // Updated to support array format
+    marks: 1,
+    subcategory: "", // Updated from mcqSubcategory
+    starterCode: "", // Initialize starter code
+    testCases: [], // Initialize test cases
+    questionId: "", // Initialize questionId
+    questionNumber: 0, // Initialize questionNumber
+    points: 1, // Initialize points
+    difficulty: "MEDIUM", // Initialize difficulty
+    entityType: "mcq", // Initialize entityType
+    category: "MCQ" // Initialize category
   });
 
   const [currentReferenceMaterial, setCurrentReferenceMaterial] = useState<ReferenceMaterial>({
@@ -73,36 +141,30 @@ const AssessmentCreation: React.FC = () => {
   const [currentTestCase, setCurrentTestCase] = useState<TestCase>({
     id: "",
     input: "",
-    expectedOutput: "",
-    marks: 1
+    expectedOutput: ""
   });
   const [showTestCaseForm, setShowTestCaseForm] = useState(false);
   const [testCaseQuestionId, setTestCaseQuestionId] = useState<number | null>(null);
-
-  const [showQuestionForm, setShowQuestionForm] = useState(false);
+  const [showMcqForm, setShowMcqForm] = useState(false);
+  const [showProgrammingForm, setShowProgrammingForm] = useState(false);
   const [showReferenceMaterialForm, setShowReferenceMaterialForm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState("");
 
   const departments = ["Computer Science", "Information Technology", "Electronics", "Mechanical", "Civil", "All Departments"];
   // Updated categories to match requirements
-  const categories = ["MCQ's", "Programming (Any Language)"];
+  const categories = ["MCQ", "Coding"];
   
-  // Subcategories for MCQ's including "All" option
-  const mcqSubcategories = ["All", "Aptitude", "Technical", "Verbal"];
+  // Subcategories for MCQ - including all four types
+  const mcqSubcategories = ["ALL", "Technical", "Aptitude", "Verbal"];
+  
+  // Status options
+  const statusOptions = ["active", "inactive"];
 
-  const handleInputChange = (field: string, value: string | number) => {
+  const handleInputChange = (field: string, value: string | number | string[]) => {
     setAssessmentData(prev => ({
       ...prev,
       [field]: value
-    }));
-  };
-
-  // Add handler for subcategory
-  const handleSubcategoryChange = (value: string) => {
-    setAssessmentData(prev => ({
-      ...prev,
-      mcqSubcategory: value
     }));
   };
 
@@ -136,40 +198,207 @@ const AssessmentCreation: React.FC = () => {
     }));
   };
 
+  const handleSchedulingChange = (field: string, value: string) => {
+    setAssessmentData(prev => ({
+      ...prev,
+      scheduling: {
+        ...prev.scheduling,
+        [field]: value
+      }
+    }));
+  };
+
+  // Helper function to combine date and time into ISO string
+  const combineDateTime = (date: string, time: string, period: string) => {
+    if (!date || !time) {
+      // Return current date/time if not provided
+      return new Date().toISOString();
+    }
+    
+    // Convert 12-hour format to 24-hour format
+    let [hours, minutes] = time.split(':').map(Number);
+    if (period === 'PM' && hours < 12) hours += 12;
+    if (period === 'AM' && hours === 12) hours = 0;
+    
+    // Format as ISO string
+    const dateTime = new Date(`${date}T${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:00`);
+    return dateTime.toISOString();
+  };
+
+  // Helper function to extract time components from ISO string
+  const extractTimeComponents = (isoString: string) => {
+    if (!isoString) return { date: '', time: '', period: 'AM' };
+    
+    const dateObj = new Date(isoString);
+    const date = dateObj.toISOString().split('T')[0];
+    let hours = dateObj.getHours();
+    const minutes = dateObj.getMinutes();
+    const period = hours >= 12 ? 'PM' : 'AM';
+    
+    // Convert to 12-hour format
+    if (hours === 0) hours = 12;
+    if (hours > 12) hours -= 12;
+    
+    const time = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+    
+    return { date, time, period };
+  };
+
+  // Initialize date components with proper fallback
+  const initialStartDate = extractTimeComponents(assessmentData.scheduling.startDate || new Date().toISOString());
+  const initialEndDate = extractTimeComponents(assessmentData.scheduling.endDate || new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString());
+
+  // State for separate date/time inputs
+  const [startDateComponents, setStartDateComponents] = useState(initialStartDate);
+  const [endDateComponents, setEndDateComponents] = useState(initialEndDate);
+
+  // Initialize date/time components on component mount and when scheduling data changes
+  useEffect(() => {
+    setStartDateComponents(extractTimeComponents(assessmentData.scheduling.startDate));
+    setEndDateComponents(extractTimeComponents(assessmentData.scheduling.endDate));
+  }, [assessmentData.scheduling.startDate, assessmentData.scheduling.endDate]);
+
+  // Update handlers for separate date/time inputs
+  const handleStartDateChange = (date: string) => {
+    const newComponents = { ...startDateComponents, date };
+    setStartDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('startDate', isoString);
+  };
+
+  const handleStartTimeChange = (time: string) => {
+    const newComponents = { ...startDateComponents, time };
+    setStartDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('startDate', isoString);
+  };
+
+  const handleStartPeriodChange = (period: string) => {
+    const newComponents = { ...startDateComponents, period };
+    setStartDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('startDate', isoString);
+  };
+
+  const handleEndDateChange = (date: string) => {
+    const newComponents = { ...endDateComponents, date };
+    setEndDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('endDate', isoString);
+  };
+
+  const handleEndTimeChange = (time: string) => {
+    const newComponents = { ...endDateComponents, time };
+    setEndDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('endDate', isoString);
+  };
+
+  const handleEndPeriodChange = (period: string) => {
+    const newComponents = { ...endDateComponents, period };
+    setEndDateComponents(newComponents);
+    const isoString = combineDateTime(newComponents.date, newComponents.time, newComponents.period);
+    handleSchedulingChange('endDate', isoString);
+  };
+
   const addQuestion = () => {
     if (!currentQuestion.text.trim()) {
       alert("Please enter a question text");
       return;
     }
 
-    // For MCQ categories, validate options
-    if (assessmentData.category === "MCQ's") {
-      if (currentQuestion.options.some(option => !option.trim())) {
-        alert("Please fill all options");
+    // Check if we're adding an MCQ question
+    if (showMcqForm) {
+      // Check if subcategory is selected for MCQ
+      if (!currentQuestion.subcategory) {
+        alert("Please select a subcategory for MCQ");
         return;
       }
+      
+      // Create MCQ question with proper structure
+      const newMcqQuestion: Question = {
+        ...currentQuestion,
+        id: Date.now(),
+        questionId: `Q_${String(assessmentData.questions.length + 1).padStart(3, '0')}`,
+        questionNumber: assessmentData.questions.length + 1,
+        points: currentQuestion.marks,
+        difficulty: assessmentData.difficulty || "MEDIUM",
+        entityType: "mcq",
+        category: "MCQ",
+        language: "", // Empty string for MCQ questions
+        starterCode: "", // Empty string for MCQ questions
+        testCases: [], // Empty array for MCQ questions,
+        // Convert correctAnswer from index to array of option IDs
+        correctAnswer: [String.fromCharCode(65 + (currentQuestion.correctAnswer as number))]
+      };
+
+      setAssessmentData(prev => ({
+        ...prev,
+        questions: [...prev.questions, newMcqQuestion]
+      }));
+
+      // Reset form
+      setCurrentQuestion({
+        id: 0,
+        text: "",
+        options: ["", "", "", ""],
+        correctAnswer: [], // Reset to empty array
+        marks: 1,
+        subcategory: "", // Reset subcategory
+        starterCode: "", // Reset starter code
+        testCases: [], // Reset test cases
+        questionId: "", // Reset questionId
+        questionNumber: 0, // Reset questionNumber
+        points: 1, // Reset points
+        difficulty: "MEDIUM", // Reset difficulty
+        entityType: "mcq", // Reset entityType
+        category: "MCQ" // Reset category
+      });
+
+      setShowMcqForm(false);
+    } 
+    // Check if we're adding a Programming question
+    else if (showProgrammingForm) {
+      // Create Programming question with proper structure
+      const newProgrammingQuestion: Question = {
+        ...currentQuestion,
+        id: Date.now(),
+        questionId: `Q_${String(assessmentData.questions.length + 1).padStart(3, '0')}`,
+        questionNumber: assessmentData.questions.length + 1,
+        points: currentQuestion.marks,
+        difficulty: assessmentData.difficulty || "MEDIUM",
+        entityType: "coding",
+        category: "PROGRAMMING",
+        options: ["", "", "", ""], // Default empty options for programming
+        correctAnswer: [], // Updated to empty array format
+        subcategory: "" // Empty string for programming questions
+      };
+
+      setAssessmentData(prev => ({
+        ...prev,
+        questions: [...prev.questions, newProgrammingQuestion]
+      }));
+
+      // Reset form
+      setCurrentQuestion({
+        id: 0,
+        text: "",
+        options: ["", "", "", ""],
+        correctAnswer: [], // Reset to empty array
+        marks: 1,
+        subcategory: "", // Reset subcategory
+        starterCode: "", // Reset starter code
+        testCases: [], // Reset test cases
+        questionId: "", // Reset questionId
+        questionNumber: 0, // Reset questionNumber
+        points: 1, // Reset points
+        difficulty: "MEDIUM", // Reset difficulty
+        entityType: "coding", // Reset entityType
+        category: "PROGRAMMING" // Reset category
+      });
+
+      setShowProgrammingForm(false);
     }
-
-    const newQuestion: Question = {
-      ...currentQuestion,
-      id: Date.now()
-    };
-
-    setAssessmentData(prev => ({
-      ...prev,
-      questions: [...prev.questions, newQuestion]
-    }));
-
-    // Reset form
-    setCurrentQuestion({
-      id: 0,
-      text: "",
-      options: ["", "", "", ""],
-      correctAnswer: 0,
-      marks: 1
-    });
-
-    setShowQuestionForm(false);
   };
 
   const removeQuestion = (id: number) => {
@@ -245,8 +474,7 @@ const AssessmentCreation: React.FC = () => {
     setCurrentTestCase({
       id: "",
       input: "",
-      expectedOutput: "",
-      marks: 1
+      expectedOutput: ""
     });
 
     setShowTestCaseForm(false);
@@ -266,42 +494,116 @@ const AssessmentCreation: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setIsSubmitting(true);
     
-    console.log('=== CREATE ASSESSMENT CLICKED ===');
-    console.log('Questions count:', assessmentData.questions.length);
-    console.log('Reference materials count:', assessmentData.referenceMaterials.length);
-    console.log('Assessment data:', assessmentData);
-    
-    if (assessmentData.questions.length === 0) {
-      alert("Please add at least one question");
-      return;
-    }
-
-    // Validate that subcategory is selected when MCQ's is chosen
-    if (assessmentData.category === "MCQ's" && !assessmentData.mcqSubcategory) {
-      alert("Please select a subcategory for MCQ's");
-      return;
-    }
-
-    // Validate questions based on category
-    for (const question of assessmentData.questions) {
-      if (!question.text.trim()) {
-        alert("Please enter text for all questions");
+    try {
+      console.log('=== Submitting Assessment ===');
+      console.log('Current assessmentData:', JSON.stringify(assessmentData, null, 2));
+      console.log('Current scheduling data:', assessmentData.scheduling);
+      
+      // Validate required fields
+      if (!assessmentData.title.trim()) {
+        alert("Please enter an assessment title");
+        setIsSubmitting(false);
         return;
       }
-
-      // For MCQ categories, validate options
-      if (assessmentData.category === "MCQ's") {
-        if (question.options.some(option => !option.trim())) {
-          alert("Please fill all options for MCQ questions");
+      
+      if (!assessmentData.department) {
+        alert("Please select a department");
+        setIsSubmitting(false);
+        return;
+      }
+      
+      if (assessmentData.questions.length === 0) {
+        alert("Please add at least one question");
+        setIsSubmitting(false);
+        return;
+      }
+      
+      // Validate all questions
+      for (const question of assessmentData.questions) {
+        if (!question.text.trim()) {
+          alert("Please enter text for all questions");
+          setIsSubmitting(false);
           return;
         }
+        
+        // Check if this is an MCQ question by seeing if it has meaningful options
+        if (question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "")) {
+          // This is an MCQ question with actual options
+          if (question.options.some(opt => !opt.trim())) {
+            alert("Please fill all options for MCQ questions");
+            setIsSubmitting(false);
+            return;
+          }
+          if (!question.subcategory) {
+            alert("Please select a subcategory for all MCQ questions");
+            setIsSubmitting(false);
+            return;
+          }
+        }
       }
-    }
-
-    try {
-      setIsSubmitting(true);
-      const response = await AssessmentService.createAssessment(assessmentData);
+      
+      // Analyze questions to determine entity types and subcategories
+      const entities: any[] = [];
+      const mcqSubcategories = new Set<string>();
+      let hasCoding = false;
+      let mcqCount = 0;
+      let codingCount = 0;
+      
+      // Analyze questions to determine entity types and subcategories
+      assessmentData.questions.forEach((question) => {
+        // Check if this is an MCQ question by seeing if it has meaningful options
+        if (question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "")) {
+          // This is an MCQ question with actual options
+          mcqCount++;
+          const subcategory = question.subcategory || 'technical';
+          mcqSubcategories.add(subcategory);
+        } else if (question.starterCode && question.starterCode.trim() !== "") {
+          // This is a Coding question
+          hasCoding = true;
+          codingCount++;
+        }
+      });
+      
+      // Add MCQ entity with proper batching (50 questions per batch)
+      if (mcqCount > 0) {
+        const mcqBatches = Math.ceil(mcqCount / 50);
+        for (let i = 1; i <= mcqBatches; i++) {
+          entities.push({
+            type: "MCQ",
+            subcategories: Array.from(mcqSubcategories),
+            batch: `mcq_batch_${i}`
+          });
+        }
+      }
+      
+      // Add Coding entity (no batching limit)
+      if (hasCoding) {
+        entities.push({
+          type: "Coding",
+          description: "Programming questions",
+          batch: `programming_batch_1`
+        });
+      }
+      
+      // Update totalQuestions in configuration before submitting
+      const assessmentDataToSend = {
+        ...assessmentData,
+        configuration: {
+          ...assessmentData.configuration,
+          totalQuestions: assessmentData.questions.length
+        },
+        entities: entities,
+        // Add publishedAt if the assessment is published
+        ...(assessmentData.isPublished && { publishedAt: new Date().toISOString() })
+      };
+      
+      // Log the data being sent
+      console.log('Sending assessment data to backend:', JSON.stringify(assessmentDataToSend, null, 2));
+      console.log('Scheduling data in assessmentDataToSend:', assessmentDataToSend.scheduling);
+      
+      const response = await AssessmentService.createAssessment(assessmentDataToSend);
       console.log('Assessment created successfully:', response);
       setSuccessMessage("Assessment created successfully!");
       
@@ -310,16 +612,43 @@ const AssessmentCreation: React.FC = () => {
         title: "",
         description: "",
         duration: 60,
-        totalMarks: 100,
         instructions: "",
         department: "",
-        difficulty: "medium",
-        category: "",
-        mcqSubcategory: "", // Add missing field
-        negativeMarking: 0, // Add missing field
+        difficulty: "",
+        category: ["MCQ", "Coding"],
         questions: [],
-        referenceMaterials: []
+        referenceMaterials: [],
+        status: "ACTIVE",
+        type: "DEPARTMENT_WISE",
+        domain: "ksrce.ac.in",
+        configuration: {
+          maxAttempts: 2,
+          passingScore: 60,
+          randomizeQuestions: true,
+          totalQuestions: 0
+        },
+        scheduling: {
+          startDate: new Date().toISOString(),
+          endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          timezone: "Asia/Kolkata"
+        },
+        target: {
+          departments: [],
+          years: [3, 4]
+        },
+        stats: {
+          avgScore: 0,
+          completed: 0,
+          highestScore: 0,
+          totalParticipants: 0
+        },
+        entities: [],
+        isPublished: false
       });
+      
+      // Reset date/time components
+      setStartDateComponents(extractTimeComponents(new Date().toISOString()));
+      setEndDateComponents(extractTimeComponents(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()));
       
       setTimeout(() => setSuccessMessage(""), 3000);
     } catch (error: any) {
@@ -371,39 +700,31 @@ const AssessmentCreation: React.FC = () => {
             </div>
 
             <div className="pts-form-group">
-              <label className="pts-form-label">Category *</label>
-              <select
-                className="pts-form-select"
-                value={assessmentData.category}
-                onChange={(e) => handleInputChange("category", e.target.value)}
-                required
-              >
-                <option value="">Select Category</option>
+              <label className="pts-form-label">Categories *</label>
+              <div style={{ display: 'flex', gap: '10px' }}>
                 {categories.map((cat) => (
-                  <option key={cat} value={cat}>{cat}</option>
+                  <label key={cat} style={{ display: 'flex', alignItems: 'center', cursor: 'pointer' }}>
+                    <input
+                      type="checkbox"
+                      checked={assessmentData.category.includes(cat)}
+                      onChange={(e) => {
+                        if (e.target.checked) {
+                          // Add category if not already present
+                          if (!assessmentData.category.includes(cat)) {
+                            handleInputChange("category", [...assessmentData.category, cat]);
+                          }
+                        } else {
+                          // Remove category if present
+                          handleInputChange("category", assessmentData.category.filter(c => c !== cat));
+                        }
+                      }}
+                      style={{ marginRight: '5px' }}
+                    />
+                    {cat}
+                  </label>
                 ))}
-              </select>
-            </div>
-
-            {/* Show subcategory dropdown only when MCQ's is selected */}
-            {assessmentData.category === "MCQ's" && (
-              <div className="pts-form-group">
-                <label className="pts-form-label">MCQ Subcategory *</label>
-                <select
-                  className="pts-form-select"
-                  value={assessmentData.mcqSubcategory}
-                  onChange={(e) => handleSubcategoryChange(e.target.value)}
-                  required
-                >
-                  <option value="">Select Subcategory</option>
-                  {mcqSubcategories.map((subcat) => (
-                    <option key={subcat} value={subcat}>
-                      {subcat} {subcat === "All" ? "(Aptitude, Technical, Verbal)" : ""}
-                    </option>
-                  ))}
-                </select>
               </div>
-            )}
+            </div>
 
             <div className="pts-form-group">
               <label className="pts-form-label">Difficulty Level</label>
@@ -430,33 +751,110 @@ const AssessmentCreation: React.FC = () => {
                 required
               />
             </div>
-
+            
             <div className="pts-form-group">
-              <label className="pts-form-label">Total Marks *</label>
-              <input
-                type="number"
-                className="pts-form-input"
-                placeholder="Enter total marks"
-                min="1"
-                value={assessmentData.totalMarks}
-                onChange={(e) => handleInputChange("totalMarks", parseInt(e.target.value) || 0)}
-                required
-              />
+              <label className="pts-form-label">Status</label>
+              <select
+                className="pts-form-select"
+                value={assessmentData.status}
+                onChange={(e) => handleInputChange("status", e.target.value)}
+              >
+                {statusOptions.map((status) => (
+                  <option key={status} value={status}>
+                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                  </option>
+                ))}
+              </select>
             </div>
+          </div>
 
-            <div className="pts-form-group">
-              <label className="pts-form-label">Negative Marking Per Wrong Answer</label>
-              <input
-                type="number"
-                className="pts-form-input"
-                placeholder="Enter negative marks (e.g., 0.25)"
-                min="0"
-                step="0.1"
-                value={assessmentData.negativeMarking}
-                onChange={(e) => handleInputChange("negativeMarking", parseFloat(e.target.value) || 0)}
-              />
-              <div style={{ fontSize: "0.8rem", color: "#6c757d", marginTop: "5px" }}>
-                Enter 0 for no negative marking
+          {/* Scheduling Section */}
+          <div className="pts-form-section">
+            <h3 className="pts-form-subtitle">Scheduling</h3>
+            <div className="pts-form-grid">
+              <div className="pts-form-group">
+                <label className="pts-form-label">Start Date *</label>
+                <input
+                  type="date"
+                  className="pts-form-input"
+                  value={startDateComponents.date}
+                  onChange={(e) => handleStartDateChange(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="pts-form-group">
+                <label className="pts-form-label">Start Time *</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="time"
+                    className="pts-form-input"
+                    value={startDateComponents.time}
+                    onChange={(e) => handleStartTimeChange(e.target.value)}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <select
+                    className="pts-form-select"
+                    value={startDateComponents.period}
+                    onChange={(e) => handleStartPeriodChange(e.target.value)}
+                    style={{ width: '80px' }}
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pts-form-group">
+                <label className="pts-form-label">End Date *</label>
+                <input
+                  type="date"
+                  className="pts-form-input"
+                  value={endDateComponents.date}
+                  onChange={(e) => handleEndDateChange(e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="pts-form-group">
+                <label className="pts-form-label">End Time *</label>
+                <div style={{ display: 'flex', gap: '10px' }}>
+                  <input
+                    type="time"
+                    className="pts-form-input"
+                    value={endDateComponents.time}
+                    onChange={(e) => handleEndTimeChange(e.target.value)}
+                    required
+                    style={{ flex: 1 }}
+                  />
+                  <select
+                    className="pts-form-select"
+                    value={endDateComponents.period}
+                    onChange={(e) => handleEndPeriodChange(e.target.value)}
+                    style={{ width: '80px' }}
+                  >
+                    <option value="AM">AM</option>
+                    <option value="PM">PM</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="pts-form-group">
+                <label className="pts-form-label">Timezone *</label>
+                <select
+                  className="pts-form-select"
+                  value={assessmentData.scheduling.timezone}
+                  onChange={(e) => handleSchedulingChange("timezone", e.target.value)}
+                  required
+                >
+                  <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                  <option value="America/New_York">America/New_York (EST)</option>
+                  <option value="America/Los_Angeles">America/Los_Angeles (PST)</option>
+                  <option value="Europe/London">Europe/London (GMT)</option>
+                  <option value="Europe/Paris">Europe/Paris (CET)</option>
+                  <option value="Asia/Tokyo">Asia/Tokyo (JST)</option>
+                </select>
               </div>
             </div>
           </div>
@@ -655,16 +1053,43 @@ const AssessmentCreation: React.FC = () => {
           <div className="pts-form-section">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "20px" }}>
               <h3 className="pts-form-subtitle">Questions</h3>
-              <button
-                type="button"
-                className="pts-btn-secondary"
-                onClick={() => setShowQuestionForm(true)}
-                disabled={!assessmentData.category || (assessmentData.category === "MCQ's" && !assessmentData.mcqSubcategory)}
-                title={!assessmentData.category ? "Please select a category first" : 
-                       (assessmentData.category === "MCQ's" && !assessmentData.mcqSubcategory) ? "Please select a subcategory for MCQ's" : ""}
-              >
-                Add Question
-              </button>
+              <div style={{ display: "flex", gap: "10px" }}>
+                {assessmentData.category.includes("MCQ") && (
+                  <button
+                    type="button"
+                    className="pts-btn-secondary"
+                    onClick={() => {
+                      setShowMcqForm(true);
+                      setShowProgrammingForm(false);
+                    }}
+                  >
+                    Add MCQ Question
+                  </button>
+                )}
+                {assessmentData.category.includes("Coding") && (
+                  <button
+                    type="button"
+                    className="pts-btn-secondary"
+                    onClick={() => {
+                      setShowProgrammingForm(true);
+                      setShowMcqForm(false);
+                    }}
+                  >
+                    Add Programming Question
+                  </button>
+                )}
+                {!assessmentData.category.includes("MCQ") && !assessmentData.category.includes("Coding") && (
+                  <div style={{ 
+                    padding: "8px 12px", 
+                    background: '#f8f9fa', 
+                    borderRadius: '4px',
+                    color: '#6c757d',
+                    fontSize: '0.9rem'
+                  }}>
+                    Select category to add questions
+                  </div>
+                )}
+              </div>
             </div>
 
             {assessmentData.questions.length > 0 && (
@@ -681,22 +1106,24 @@ const AssessmentCreation: React.FC = () => {
                       <div style={{ flex: 1 }}>
                         <h4 style={{ color: "#523C48", margin: "0 0 10px 0" }}>
                           Question {index + 1} ({question.marks} marks)
+                          {question.subcategory && ` - ${question.subcategory}`}
+                          {question.language && ` (${question.language})`}
                         </h4>
                         <p style={{ color: "#523C48", margin: "0 0 15px 0" }}>{question.text}</p>
                         
-                        {/* Show options only for MCQ categories */}
-                        {assessmentData.category === "MCQ's" && (
+                        {/* Show options only for MCQ questions */}
+                        {question.hasOwnProperty('options') && question.options && question.options.length > 0 && question.options.some(opt => opt.trim() !== "") && (
                           <>
                             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "10px", marginBottom: "10px" }}>
                               {question.options.map((option, optIndex) => (
                                 <div key={optIndex} style={{ 
                                   padding: "8px", 
-                                  background: question.correctAnswer === optIndex ? "#d4edda" : "#f8f9fa",
+                                  background: (question.correctAnswer as string[]).includes(String.fromCharCode(65 + optIndex)) ? "#d4edda" : "#f8f9fa",
                                   borderRadius: "4px",
-                                  border: question.correctAnswer === optIndex ? "1px solid #28a745" : "1px solid #dee2e6"
+                                  border: (question.correctAnswer as string[]).includes(String.fromCharCode(65 + optIndex)) ? "1px solid #28a745" : "1px solid #dee2e6"
                                 }}>
                                   <strong>{String.fromCharCode(65 + optIndex)}.</strong> {option}
-                                  {question.correctAnswer === optIndex && (
+                                  {(question.correctAnswer as string[]).includes(String.fromCharCode(65 + optIndex)) && (
                                     <span style={{ 
                                       background: "#28a745", 
                                       color: "white", 
@@ -714,8 +1141,8 @@ const AssessmentCreation: React.FC = () => {
                           </>
                         )}
                         
-                        {/* For Programming questions, show a simple indicator */}
-                        {assessmentData.category === "Programming (Any Language)" && (
+                        {/* For Programming questions, show starter code (without language) */}
+                        {question.starterCode && question.starterCode.trim() !== "" && (
                           <div style={{ 
                             padding: "10px", 
                             background: "#e9ecef", 
@@ -723,12 +1150,23 @@ const AssessmentCreation: React.FC = () => {
                             fontStyle: "italic",
                             marginBottom: "15px"
                           }}>
-                            Programming Question (No options)
+                            Programming Question
+                            <div style={{ 
+                              marginTop: "8px", 
+                              padding: "8px", 
+                              background: "#fff", 
+                              borderRadius: "4px",
+                              fontFamily: "monospace",
+                              fontSize: "0.9rem"
+                            }}>
+                              <strong>Starter Code:</strong>
+                              <pre style={{ margin: "5px 0 0 0" }}>{question.starterCode}</pre>
+                            </div>
                           </div>
                         )}
 
-                        {/* Test Cases Section for Programming Questions */}
-                        {assessmentData.category === "Programming (Any Language)" && (
+                        {/* Test Cases Section for Programming Questions - Only show for programming questions */}
+                        {(question.starterCode && question.starterCode.trim() !== "") && (
                           <div style={{ marginTop: "15px" }}>
                             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "10px" }}>
                               <h4 style={{ color: "#523C48", margin: 0 }}>Test Cases</h4>
@@ -739,8 +1177,7 @@ const AssessmentCreation: React.FC = () => {
                                   setCurrentTestCase({
                                     id: "",
                                     input: "",
-                                    expectedOutput: "",
-                                    marks: 1
+                                    expectedOutput: ""
                                   });
                                   setShowTestCaseForm(true);
                                   setTestCaseQuestionId(question.id); // Set the question ID for test cases
@@ -751,15 +1188,15 @@ const AssessmentCreation: React.FC = () => {
                               </button>
                             </div>
 
-                            {question.testCases && question.testCases.length > 0 ? (
-                              <div style={{ 
-                                background: "#f8f9fa", 
-                                borderRadius: "4px", 
-                                padding: "10px",
-                                maxHeight: "200px",
-                                overflowY: "auto"
-                              }}>
-                                {question.testCases.map((testCase) => (
+                            <div style={{ 
+                              background: "#f8f9fa", 
+                              borderRadius: "4px", 
+                              padding: "10px",
+                              maxHeight: "200px",
+                              overflowY: "auto"
+                            }}>
+                              {question.testCases && question.testCases.length > 0 ? (
+                                question.testCases.map((testCase) => (
                                   <div key={testCase.id} style={{ 
                                     display: "flex", 
                                     justifyContent: "space-between", 
@@ -772,7 +1209,6 @@ const AssessmentCreation: React.FC = () => {
                                       <div><strong>Expected Output:</strong> {testCase.expectedOutput}</div>
                                     </div>
                                     <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-                                      <span>({testCase.marks} marks)</span>
                                       <button
                                         type="button"
                                         className="pts-btn-danger"
@@ -783,20 +1219,11 @@ const AssessmentCreation: React.FC = () => {
                                       </button>
                                     </div>
                                   </div>
-                                ))}
-                              </div>
-                            ) : (
-                              <div style={{ 
-                                textAlign: "center", 
-                                padding: "20px", 
-                                background: "#f8f9fa", 
-                                borderRadius: "4px",
-                                fontStyle: "italic",
-                                color: "#6c757d"
-                              }}>
-                                No test cases added yet
-                              </div>
-                            )}
+                                ))
+                              ) : (
+                                <p style={{ color: "#6c757d", margin: "0" }}>No test cases added yet</p>
+                              )}
+                            </div>
                           </div>
                         )}
 
@@ -831,8 +1258,8 @@ const AssessmentCreation: React.FC = () => {
             )}
           </div>
 
-          {/* Add Question Form Modal */}
-          {showQuestionForm && (
+          {/* Add MCQ Question Form Modal */}
+          {showMcqForm && (
             <div style={{
               position: "fixed",
               top: 0,
@@ -855,7 +1282,7 @@ const AssessmentCreation: React.FC = () => {
                 overflowY: "auto"
               }}>
                 <h3 style={{ color: "#523C48", marginTop: 0 }}>
-                  Add New Question
+                  Add MCQ Question
                 </h3>
                 
                 <div className="pts-form-group">
@@ -870,43 +1297,56 @@ const AssessmentCreation: React.FC = () => {
                   />
                 </div>
 
-                {/* Show options only for MCQ categories */}
-                {assessmentData.category === "MCQ's" && (
-                  <>
-                    <div className="pts-form-grid">
-                      {currentQuestion.options.map((option, index) => (
-                        <div className="pts-form-group" key={index}>
-                          <label className="pts-form-label">Option {String.fromCharCode(65 + index)} *</label>
-                          <input
-                            type="text"
-                            className="pts-form-input"
-                            placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
-                            value={option}
-                            onChange={(e) => handleQuestionChange("options", e.target.value, index)}
-                            required
-                          />
-                        </div>
-                      ))}
-                    </div>
-
-                    <div className="pts-form-group">
-                      <label className="pts-form-label">Correct Answer *</label>
-                      <select
-                        className="pts-form-select"
-                        value={currentQuestion.correctAnswer}
-                        onChange={(e) => handleQuestionChange("correctAnswer", parseInt(e.target.value))}
+                <div className="pts-form-grid">
+                  {currentQuestion.options.map((option, index) => (
+                    <div className="pts-form-group" key={index}>
+                      <label className="pts-form-label">Option {String.fromCharCode(65 + index)} *</label>
+                      <input
+                        type="text"
+                        className="pts-form-input"
+                        placeholder={`Enter option ${String.fromCharCode(65 + index)}`}
+                        value={option}
+                        onChange={(e) => handleQuestionChange("options", e.target.value, index)}
                         required
-                      >
-                        <option value="">Select Correct Answer</option>
-                        {currentQuestion.options.map((option, index) => (
-                          <option key={index} value={index}>
-                            {String.fromCharCode(65 + index)}. {option}
-                          </option>
-                        ))}
-                      </select>
+                      />
                     </div>
-                  </>
-                )}
+                  ))}
+                </div>
+
+                <div className="pts-form-group">
+                  <label className="pts-form-label">Correct Answer *</label>
+                  <select
+                    className="pts-form-select"
+                    value={(currentQuestion.correctAnswer as string[])[0] || ""}
+                    onChange={(e) => handleQuestionChange("correctAnswer", [e.target.value])}
+                    required
+                  >
+                    <option value="">Select Correct Answer</option>
+                    {currentQuestion.options.map((option, index) => (
+                      <option key={index} value={String.fromCharCode(65 + index)}>
+                        {String.fromCharCode(65 + index)}. {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+                
+                {/* MCQ Subcategory Selection */}
+                <div className="pts-form-group">
+                  <label className="pts-form-label">MCQ Subcategory *</label>
+                  <select
+                    className="pts-form-select"
+                    value={currentQuestion.subcategory || ""}
+                    onChange={(e) => handleQuestionChange("subcategory", e.target.value)}
+                    required
+                  >
+                    <option value="">Select Subcategory</option>
+                    {mcqSubcategories.map((subcat) => (
+                      <option key={subcat} value={subcat}>
+                        {subcat}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
                 <div className="pts-form-group">
                   <label className="pts-form-label">Marks *</label>
@@ -925,7 +1365,91 @@ const AssessmentCreation: React.FC = () => {
                   <button
                     type="button"
                     className="pts-btn-secondary"
-                    onClick={() => setShowQuestionForm(false)}
+                    onClick={() => setShowMcqForm(false)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="pts-btn-primary"
+                    onClick={addQuestion}
+                  >
+                    Add Question
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Add Programming Question Form Modal */}
+          {showProgrammingForm && (
+            <div style={{
+              position: "fixed",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: "rgba(0,0,0,0.5)",
+              display: "flex",
+              justifyContent: "center",
+              alignItems: "center",
+              zIndex: 1000
+            }}>
+              <div style={{
+                background: "white",
+                padding: "30px",
+                borderRadius: "8px",
+                width: "90%",
+                maxWidth: "600px",
+                maxHeight: "90vh",
+                overflowY: "auto"
+              }}>
+                <h3 style={{ color: "#523C48", marginTop: 0 }}>
+                  Add Programming Question
+                </h3>
+                
+                <div className="pts-form-group">
+                  <label className="pts-form-label">Question Text *</label>
+                  <textarea
+                    className="pts-form-textarea"
+                    placeholder="Enter your question here"
+                    value={currentQuestion.text}
+                    onChange={(e) => handleQuestionChange("text", e.target.value)}
+                    rows={3}
+                    required
+                  />
+                </div>
+
+                {/* Starter Code Section */}
+                <div className="pts-form-group">
+                  <label className="pts-form-label">Starter Code</label>
+                  <textarea
+                    className="pts-form-textarea"
+                    placeholder="Enter starter code"
+                    value={currentQuestion.starterCode || ""}
+                    onChange={(e) => handleQuestionChange("starterCode", e.target.value)}
+                    rows={4}
+                  />
+                </div>
+
+                <div className="pts-form-group">
+                  <label className="pts-form-label">Marks *</label>
+                  <input
+                    type="number"
+                    className="pts-form-input"
+                    placeholder="Enter marks"
+                    min="1"
+                    value={currentQuestion.marks}
+                    onChange={(e) => handleQuestionChange("marks", parseInt(e.target.value) || 1)}
+                    required
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
+                  <button
+                    type="button"
+                    className="pts-btn-secondary"
+                    onClick={() => setShowProgrammingForm(false)}
                   >
                     Cancel
                   </button>
@@ -998,19 +1522,6 @@ const AssessmentCreation: React.FC = () => {
                   </div>
                 </div>
 
-                <div className="pts-form-group">
-                  <label className="pts-form-label">Marks *</label>
-                  <input
-                    type="number"
-                    className="pts-form-input"
-                    placeholder="Enter marks"
-                    min="1"
-                    value={currentTestCase.marks}
-                    onChange={(e) => handleTestCaseChange("marks", parseInt(e.target.value) || 1)}
-                    required
-                  />
-                </div>
-
                 <div style={{ display: "flex", gap: "10px", justifyContent: "flex-end" }}>
                   <button
                     type="button"
@@ -1047,15 +1558,58 @@ const AssessmentCreation: React.FC = () => {
                   title: "",
                   description: "",
                   duration: 60,
-                  totalMarks: 100,
                   instructions: "",
                   department: "",
-                  difficulty: "medium",
-                  category: "",
-                  mcqSubcategory: "",
-                  negativeMarking: 0,
+                  difficulty: "",
+                  category: ["MCQ", "Coding"],
                   questions: [],
-                  referenceMaterials: []
+                  referenceMaterials: [],
+                  status: "ACTIVE",
+                  type: "DEPARTMENT_WISE",
+                  domain: "ksrce.ac.in",
+                  configuration: {
+                    maxAttempts: 2,
+                    passingScore: 60,
+                    randomizeQuestions: true,
+                    totalQuestions: 0
+                  },
+                  scheduling: {
+                    startDate: new Date().toISOString(),
+                    endDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                    timezone: "Asia/Kolkata"
+                  },
+                  target: {
+                    departments: [],
+                    years: [3, 4]
+                  },
+                  stats: {
+                    avgScore: 0,
+                    completed: 0,
+                    highestScore: 0,
+                    totalParticipants: 0
+                  },
+                  entities: [],
+                  isPublished: false
+                });
+                
+                // Reset date/time components
+                setStartDateComponents(extractTimeComponents(new Date().toISOString()));
+                setEndDateComponents(extractTimeComponents(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString()));
+                
+                // Reset question forms
+                setShowMcqForm(false);
+                setShowProgrammingForm(false);
+                
+                // Reset current question
+                setCurrentQuestion({
+                  id: 0,
+                  text: "",
+                  options: ["", "", "", ""],
+                  correctAnswer: [],
+                  marks: 1,
+                  subcategory: "",
+                  starterCode: "",
+                  testCases: []
                 });
               }}
             >

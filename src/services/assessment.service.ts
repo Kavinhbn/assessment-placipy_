@@ -1,7 +1,7 @@
 import axios from 'axios';
 import AuthService from './auth.service';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000/api';
+const API_BASE_URL = import.meta.env.VITE_URL || 'http://localhost:3000';
 
 class AssessmentService {
   private getAuthHeaders() {
@@ -17,13 +17,13 @@ class AssessmentService {
     try {
       console.log('=== Creating Assessment ===');
       console.log('API Base URL:', API_BASE_URL);
-      console.log('Assessment Data:', assessmentData);
+      console.log('Assessment Data:', JSON.stringify(assessmentData, null, 2));
       
       const headers = this.getAuthHeaders();
       console.log('Request headers:', headers);
       
       const response = await axios.post(
-        `${API_BASE_URL}/assessments`,
+        `${API_BASE_URL}/api/assessments`,
         assessmentData,
         { headers }
       );
@@ -45,7 +45,7 @@ class AssessmentService {
       if (filters?.lastKey) params.append('lastKey', filters.lastKey);
 
       const response = await axios.get(
-        `${API_BASE_URL}/assessments?${params.toString()}`,
+        `${API_BASE_URL}/api/assessments?${params.toString()}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -58,7 +58,7 @@ class AssessmentService {
   async getAssessmentById(assessmentId: string): Promise<any> {
     try {
       const response = await axios.get(
-        `${API_BASE_URL}/assessments/${assessmentId}`,
+        `${API_BASE_URL}/api/assessments/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;
@@ -71,7 +71,7 @@ class AssessmentService {
   async updateAssessment(assessmentId: string, updates: any): Promise<any> {
     try {
       const response = await axios.put(
-        `${API_BASE_URL}/assessments/${assessmentId}`,
+        `${API_BASE_URL}/api/assessments/${assessmentId}`,
         updates,
         { headers: this.getAuthHeaders() }
       );
@@ -85,7 +85,7 @@ class AssessmentService {
   async deleteAssessment(assessmentId: string): Promise<any> {
     try {
       const response = await axios.delete(
-        `${API_BASE_URL}/assessments/${assessmentId}`,
+        `${API_BASE_URL}/api/assessments/${assessmentId}`,
         { headers: this.getAuthHeaders() }
       );
       return response.data;

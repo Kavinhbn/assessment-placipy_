@@ -12,10 +12,20 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 });
 
 class CodeEvaluationController {
-    private questionsTableName: string;
+    private assessmentsTableName: string;
 
     constructor() {
-        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assessment_placipy_asseessment_questions';
+        this.assessmentsTableName = process.env.ASSESSMENTS_TABLE_NAME || 'Assesment_placipy_assesments';
+    }
+
+    /**
+     * Extract domain from email address
+     */
+    private getDomainFromEmail(email: string): string {
+        if (!email || !email.includes('@')) {
+            return 'ksrce.ac.in'; // Default domain
+        }
+        return email.split('@')[1];
     }
 
     /**
@@ -25,11 +35,14 @@ class CodeEvaluationController {
         try {
             const { assessmentId, questionId, code, language } = req.body;
             const studentId = req.user?.username || req.user?.sub || req.user?.email || 'unknown_student';
-
+            // Extract email from user object
+            const userEmail = req.user?.email || req.user?.username || req.user?.sub || '';
+            
             console.log('=== Code Evaluation Request ===');
             console.log('Assessment ID:', assessmentId);
             console.log('Question ID:', questionId);
             console.log('Student ID:', studentId);
+            console.log('User Email:', userEmail);
             console.log('Language:', language);
             console.log('Code length:', code?.length);
 
@@ -41,21 +54,31 @@ class CodeEvaluationController {
                 });
             }
 
-            // Get question with test cases from database
-            const questionParams = {
-                TableName: this.questionsTableName,
-                KeyConditionExpression: 'PK = :pk AND SK = :sk',
+            // Get assessment with embedded questions from database
+            const assessmentParams = {
+                TableName: this.assessmentsTableName,
+                FilterExpression: 'begins_with(PK, :pk_prefix) AND begins_with(SK, :sk_prefix)',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`,
-                    ':sk': `CLIENT#ksrce.ac.in`
+                    ':pk_prefix': `ASSESSMENT#${assessmentId}`,
+                    ':sk_prefix': 'CLIENT#'
                 }
             };
 
-            const questionResult = await dynamodb.query(questionParams).promise();
-            const questions = questionResult.Items || [];
+            const assessmentResult = await dynamodb.scan(assessmentParams).promise();
+            const assessments = assessmentResult.Items || [];
             
-            // Find the specific question
-            const question = questions.find(q => q.questionId === `${assessmentId}_Q${questionId}` || q.questionId === questionId);
+            // Find the specific assessment
+            const assessment = assessments.find(a => a.assessmentId === assessmentId);
+            
+            if (!assessment) {
+                return res.status(404).json({
+                    success: false,
+                    message: 'Assessment not found'
+                });
+            }
+            
+            // Find the specific question from embedded questions
+            const question = assessment.questions?.find((q: any) => q.questionId === questionId);
             
             if (!question) {
                 return res.status(404).json({
