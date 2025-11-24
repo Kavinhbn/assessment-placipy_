@@ -6,6 +6,7 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3000
 class AssessmentService {
   private getAuthHeaders() {
     const token = AuthService.getAccessToken();
+    console.log('Using auth token:', token ? 'Bearer ***' : 'No token');
     return {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json'
@@ -14,14 +15,23 @@ class AssessmentService {
 
   async createAssessment(assessmentData: any): Promise<any> {
     try {
+      console.log('=== Creating Assessment ===');
+      console.log('API Base URL:', API_BASE_URL);
+      console.log('Assessment Data:', assessmentData);
+      
+      const headers = this.getAuthHeaders();
+      console.log('Request headers:', headers);
+      
       const response = await axios.post(
         `${API_BASE_URL}/assessments`,
         assessmentData,
-        { headers: this.getAuthHeaders() }
+        { headers }
       );
+      console.log('Assessment creation response:', response.data);
       return response.data;
     } catch (error: any) {
       console.error('Error creating assessment:', error);
+      console.error('Error response:', error.response?.data);
       throw new Error(error.response?.data?.message || 'Failed to create assessment');
     }
   }

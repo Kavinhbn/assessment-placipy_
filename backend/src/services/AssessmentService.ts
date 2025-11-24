@@ -6,31 +6,76 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
 });
 
 class AssessmentService {
-    private tableName: string;
+    private assessmentsTableName: string;
+    private questionsTableName: string;
 
     constructor(tableName: string) {
-        this.tableName = tableName;
+        // Use separate tables for assessments and questions
+        this.assessmentsTableName = process.env.ASSESSMENTS_TABLE_NAME || 'Assesment_placipy_assesments';
+        this.questionsTableName = process.env.QUESTIONS_TABLE_NAME || 'Assessment_placipy_assesessment_questions';
     }
 
     async createAssessment(assessmentData: any, createdBy: string): Promise<any> {
         try {
             const timestamp = Date.now();
             const createdAt = new Date().toISOString();
-            const assessmentId = `${timestamp}_${createdBy.replace('@', '_at_').replace(/\./g, '_')}`;
+            // Generate assessment ID in the format ASSESS_001_MULT
+            const assessmentId = `ASSESS_${timestamp.toString().slice(-6)}_MULT`;
             const totalMarks = assessmentData.questions.reduce((sum: number, q: any) => sum + (q.marks || 1), 0);
 
+            // Create questions array in the new format
+            const questions = assessmentData.questions.map((question: any, index: number) => {
+                const baseQuestion: any = {
+                    questionId: `Q_${String(index + 1).padStart(3, '0')}`,
+                    questionNumber: index + 1,
+                    question: question.text,
+                    points: question.marks || 1,
+                    difficulty: (assessmentData.difficulty || 'medium').toUpperCase(),
+                    entityType: 'coding'
+                };
+
+                // Add type-specific fields
+                if (assessmentData.category === "Programming (Any Language)") {
+                    baseQuestion.entityType = 'coding';
+                    baseQuestion.category = 'PROGRAMMING';
+                    baseQuestion.language = 'python'; // Default language, can be made configurable
+                    baseQuestion.starterCode = '# Write your code here';
+                    if (question.testCases && question.testCases.length > 0) {
+                        baseQuestion.testCases = question.testCases.map((tc: any) => ({
+                            inputs: {
+                                input: tc.input
+                            },
+                            expectedOutput: tc.expectedOutput
+                        }));
+                    }
+                } else {
+                    baseQuestion.entityType = 'mcq';
+                    baseQuestion.category = 'MCQ';
+                    baseQuestion.options = question.options || [];
+                    baseQuestion.correctAnswer = question.correctAnswer;
+                }
+
+                return baseQuestion;
+            });
+
+            // Create assessment metadata in assessments table with new structure
             const assessment = {
-                PK: `ASSESSMENT#${assessmentId}`,
-                SK: 'METADATA',
-                assessmentId,
+                PK: `ASSESSMENT#${assessmentId}`, // Using PK with prefix as shown in example
+                SK: `CLIENT#ksrce.ac.in`, // Using CLIENT#ksrce.ac.in as SK as requested
+                assessmentId: assessmentId, // Keep original field for reference
                 title: assessmentData.title,
                 description: assessmentData.description || '',
                 duration: assessmentData.duration,
                 totalMarks,
                 instructions: assessmentData.instructions || '',
                 department: assessmentData.department,
+                entityType: 'coding_batch_1', // As shown in example
+                questions: questions, // Include questions in the same item
                 difficulty: assessmentData.difficulty || 'medium',
                 category: assessmentData.category || '',
+                mcqSubcategory: assessmentData.mcqSubcategory || '', // Add subcategory field
+                negativeMarking: assessmentData.negativeMarking || 0,
+                referenceMaterials: assessmentData.referenceMaterials || [],
                 questionCount: assessmentData.questions.length,
                 status: 'draft',
                 createdBy,
@@ -38,30 +83,14 @@ class AssessmentService {
                 updatedAt: createdAt
             };
 
+            console.log('Creating assessment item:', JSON.stringify(assessment, null, 2));
+
             await dynamodb.put({
-                TableName: this.tableName,
+                TableName: this.assessmentsTableName,
                 Item: assessment
             }).promise();
 
-            const questionPromises = assessmentData.questions.map((question: any, index: number) => {
-                return dynamodb.put({
-                    TableName: this.tableName,
-                    Item: {
-                        PK: `ASSESSMENT#${assessmentId}`,
-                        SK: `QUESTION#${String(index + 1).padStart(3, '0')}`,
-                        questionId: `${assessmentId}_Q${index + 1}`,
-                        questionNumber: index + 1,
-                        text: question.text,
-                        options: question.options,
-                        correctAnswer: question.correctAnswer,
-                        marks: question.marks || 1
-                    }
-                }).promise();
-            });
-
-            await Promise.all(questionPromises);
-
-            return { ...assessment, questions: assessmentData.questions };
+            return assessment;
         } catch (error) {
             console.error('Error creating assessment:', error);
             throw new Error('Failed to create assessment: ' + error.message);
@@ -70,26 +99,24 @@ class AssessmentService {
 
     async getAssessmentById(assessmentId: string): Promise<any> {
         try {
-            const params = {
-                TableName: this.tableName,
-                KeyConditionExpression: 'PK = :pk',
+            // Get assessment metadata from assessments table
+            const assessmentParams = {
+                TableName: this.assessmentsTableName,
+                KeyConditionExpression: 'PK = :pk AND SK = :sk',
                 ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`
+                    ':pk': `ASSESSMENT#${assessmentId}`,
+                    ':sk': `CLIENT#ksrce.ac.in`
                 }
             };
 
-            const result = await dynamodb.query(params).promise();
+            const assessmentResult = await dynamodb.query(assessmentParams).promise();
 
-            if (!result.Items || result.Items.length === 0) {
+            if (!assessmentResult.Items || assessmentResult.Items.length === 0) {
                 return null;
             }
 
-            const metadata = result.Items.find((item: any) => item.SK === 'METADATA');
-            const questions = result.Items
-                .filter((item: any) => item.SK.startsWith('QUESTION#'))
-                .sort((a: any, b: any) => a.questionNumber - b.questionNumber);
-
-            return { ...metadata, questions };
+            // Return the assessment with embedded questions
+            return assessmentResult.Items[0];
         } catch (error) {
             console.error('Error getting assessment:', error);
             throw new Error('Failed to retrieve assessment: ' + error.message);
@@ -98,35 +125,22 @@ class AssessmentService {
 
     async getAllAssessments(filters: any = {}, limit: number = 50, lastKey: any = null): Promise<any> {
         try {
-            let filterExpression = 'SK = :metadata';
-            let expressionAttributeValues: any = { ':metadata': 'METADATA' };
-
-            if (filters.department && filters.department !== 'All Departments') {
-                filterExpression += ' AND department = :dept';
-                expressionAttributeValues[':dept'] = filters.department;
-            }
-
-            if (filters.status) {
-                filterExpression += ' AND #status = :status';
-                expressionAttributeValues[':status'] = filters.status;
-            }
-
+            // Get all assessments using begins_with filter on PK
             const params: any = {
-                TableName: this.tableName,
-                FilterExpression: filterExpression,
-                ExpressionAttributeValues: expressionAttributeValues,
+                TableName: this.assessmentsTableName,
+                KeyConditionExpression: 'begins_with(PK, :pk_prefix) AND SK = :sk',
+                ExpressionAttributeValues: {
+                    ':pk_prefix': 'ASSESSMENT#',
+                    ':sk': 'CLIENT#ksrce.ac.in'
+                },
                 Limit: limit
             };
-
-            if (filters.status) {
-                params.ExpressionAttributeNames = { '#status': 'status' };
-            }
 
             if (lastKey) {
                 params.ExclusiveStartKey = lastKey;
             }
 
-            const result = await dynamodb.scan(params).promise();
+            const result = await dynamodb.query(params).promise();
 
             return {
                 items: result.Items || [],
@@ -142,6 +156,25 @@ class AssessmentService {
     async updateAssessment(assessmentId: string, updates: any): Promise<any> {
         try {
             const timestamp = new Date().toISOString();
+            
+            // First, get the current item to understand its structure
+            const getCurrentItemParams = {
+                TableName: this.assessmentsTableName,
+                KeyConditionExpression: 'PK = :pk AND SK = :sk',
+                ExpressionAttributeValues: {
+                    ':pk': `ASSESSMENT#${assessmentId}`,
+                    ':sk': `CLIENT#ksrce.ac.in`
+                }
+            };
+            
+            const currentItemResult = await dynamodb.query(getCurrentItemParams).promise();
+            const currentItem = currentItemResult.Items && currentItemResult.Items[0];
+            
+            if (!currentItem) {
+                throw new Error('Assessment not found');
+            }
+
+            // Build update expression
             const updateExpression = [];
             const expressionAttributeNames: any = {};
             const expressionAttributeValues: any = {};
@@ -159,10 +192,10 @@ class AssessmentService {
             expressionAttributeValues[':updatedAt'] = timestamp;
 
             const params = {
-                TableName: this.tableName,
+                TableName: this.assessmentsTableName,
                 Key: {
                     PK: `ASSESSMENT#${assessmentId}`,
-                    SK: 'METADATA'
+                    SK: `CLIENT#ksrce.ac.in`
                 },
                 UpdateExpression: `SET ${updateExpression.join(', ')}`,
                 ExpressionAttributeNames: expressionAttributeNames,
@@ -180,28 +213,16 @@ class AssessmentService {
 
     async deleteAssessment(assessmentId: string): Promise<void> {
         try {
-            const params = {
-                TableName: this.tableName,
-                KeyConditionExpression: 'PK = :pk',
-                ExpressionAttributeValues: {
-                    ':pk': `ASSESSMENT#${assessmentId}`
+            // Delete assessment from assessments table
+            const assessmentParams = {
+                TableName: this.assessmentsTableName,
+                Key: {
+                    PK: `ASSESSMENT#${assessmentId}`,
+                    SK: `CLIENT#ksrce.ac.in`
                 }
             };
 
-            const result = await dynamodb.query(params).promise();
-
-            if (!result.Items || result.Items.length === 0) {
-                throw new Error('Assessment not found');
-            }
-
-            const deletePromises = result.Items.map((item: any) => {
-                return dynamodb.delete({
-                    TableName: this.tableName,
-                    Key: { PK: item.PK, SK: item.SK }
-                }).promise();
-            });
-
-            await Promise.all(deletePromises);
+            await dynamodb.delete(assessmentParams).promise();
         } catch (error) {
             console.error('Error deleting assessment:', error);
             throw new Error('Failed to delete assessment: ' + error.message);
