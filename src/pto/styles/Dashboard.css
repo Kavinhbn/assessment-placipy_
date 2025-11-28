@@ -1157,7 +1157,7 @@
 .data-table td {
   padding: 15px;
   border-top: 1px solid var(--light-gray);
-  color: var(--text-gray);
+  color: var(--text-dark);
   background-color: white;
 }
 
@@ -1355,6 +1355,39 @@
   min-height: 100px;
 }
 
+.pts-form-label {
+  color: #523C48;
+  margin-bottom: 8px;
+  font-weight: 500;
+  display: block;
+}
+
+.pts-form-input,
+.pts-form-select,
+.pts-form-textarea {
+  width: 100%;
+  padding: 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-size: 1rem;
+  background-color: #ffffff !important;
+  color: #333333 !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.pts-form-input::placeholder,
+.pts-form-textarea::placeholder {
+  color: #9aa0a6;
+}
+
+.pts-form-input:focus,
+.pts-form-select:focus,
+.pts-form-textarea:focus {
+  outline: none;
+  border-color: #9768E1;
+  box-shadow: 0 0 0 3px rgba(151, 104, 225, 0.15);
+}
+
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1521,6 +1554,18 @@
   outline: none;
   border-color: var(--primary-purple);
   box-shadow: 0 0 0 3px rgba(151, 104, 225, 0.1);
+}
+
+@media (prefers-color-scheme: dark) {
+  .pto-dashboard .pts-form-input,
+  .pto-dashboard .pts-form-select,
+  .pto-dashboard .pts-form-textarea,
+  .pto-dashboard input,
+  .pto-dashboard select,
+  .pto-dashboard textarea {
+    background-color: #ffffff !important;
+    color: #333333 !important;
+  }
 }
 
 /* Staff Assignment */
@@ -2950,3 +2995,7 @@
   accent-color: var(--primary-purple);
 }
 
+.data-table td:first-child {
+  color: var(--text-dark);
+  font-weight: 600;
+}

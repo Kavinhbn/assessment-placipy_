@@ -538,30 +538,38 @@ class PTOService {
       department: i.department || 'All Departments',
       type: i.type || 'college-wide',
       duration: i.duration || 60,
-      date: i.date || '',
-      timeWindow: i.timeWindow || {},
-      attempts: i.attempts || 1,
-      questions: (i.questions || []).length,
-      status: i.status || 'inactive'
+      date: i.scheduling?.startDate || i.date || '',
+      timeWindow: {
+        start: i.scheduling?.startDate || i.timeWindow?.start || '',
+        end: i.scheduling?.endDate || i.timeWindow?.end || ''
+      },
+      attempts: i.configuration?.maxAttempts ?? i.attempts ?? 1,
+      questions: i.configuration?.totalQuestions ?? (i.questions || []).length ?? 0,
+      status: (typeof i.status === 'string' ? String(i.status).toLowerCase() : 'inactive')
     }));
 
     const assessmentService = require('./AssessmentService');
-    const all = await assessmentService.getAllAssessments();
+    const domain = (String(email || '').split('@')[1] || '').trim();
+    const all = await assessmentService.getAllAssessments({ clientDomain: domain });
     const mappedAlt = (all.items || []).map(m => ({
-      id: String(m.PK || ''),
+      id: String(m.SK || ''),
       name: m.title || m.name || '',
       department: m.department || 'All Departments',
       type: (m.department && m.department !== 'All Departments') ? 'department-wise' : 'college-wide',
-      duration: m.duration || 60,
-      date: m.createdAt || m.date || '',
-      timeWindow: {},
-      attempts: 1,
-      questions: m.questionCount || 0,
-      status: m.status || 'inactive'
+      duration: m.configuration?.duration || m.duration || 60,
+      date: m.scheduling?.startDate || m.createdAt || m.date || '',
+      timeWindow: {
+        start: m.scheduling?.startDate || '',
+        end: m.scheduling?.endDate || ''
+      },
+      attempts: m.configuration?.maxAttempts ?? 1,
+      questions: m.configuration?.totalQuestions ?? m.questionCount ?? 0,
+      status: (typeof m.status === 'string' ? String(m.status).toLowerCase() : 'inactive')
     }));
     const byId = new Map();
     for (const a of [...mappedClient, ...mappedAlt]) {
-      if (!byId.has(a.id)) byId.set(a.id, a);
+      const key = a.id || '';
+      if (!byId.has(key)) byId.set(key, a);
     }
     return Array.from(byId.values());
   }

@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { FaClipboardList, FaPlus, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaUpload, FaFileExcel } from 'react-icons/fa';
+import { FaClipboardList, FaPlus, FaTrash, FaEye, FaToggleOn, FaToggleOff } from 'react-icons/fa';
+import PTSAssessmentCreation from '../../pts/AssessmentCreation';
 import * as XLSX from 'xlsx';
 import PTOService, { type Assessment as AssessDto } from '../../services/pto.service';
 
@@ -16,6 +17,26 @@ interface Assessment {
   status: 'active' | 'inactive' | 'scheduled';
 }
 
+interface Question {
+  id?: string;
+  text: string;
+  options?: string[];
+  correctIndex?: number;
+}
+
+interface AssessmentDetail {
+  id?: string;
+  name: string;
+  department: string;
+  type: 'department-wise' | 'college-wide';
+  duration: number;
+  date: string;
+  timeWindow?: { start?: string; end?: string };
+  attempts: number;
+  questions?: Question[];
+  status?: 'active' | 'inactive' | 'scheduled';
+}
+
 const AssessmentManagement: React.FC = () => {
   const [assessments, setAssessments] = useState<Assessment[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -28,7 +49,7 @@ const AssessmentManagement: React.FC = () => {
         setError(null);
         const data = await PTOService.getAssessments();
         const mapped: Assessment[] = data.map((a: AssessDto) => ({
-          id: (a as any).id,
+          id: a.id,
           name: a.name,
           department: a.department,
           type: a.type,
@@ -37,11 +58,11 @@ const AssessmentManagement: React.FC = () => {
           timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
           attempts: a.attempts,
           questions: a.questions,
-          status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
+          status: a.status === 'active' ? 'active' : 'inactive'
         }));
         setAssessments(mapped);
-      } catch (e: any) {
-        setError(e.message || 'Failed to load assessments');
+      } catch (e: unknown) {
+        setError(e instanceof Error ? e.message : 'Failed to load assessments');
       } finally {
         setLoading(false);
       }
@@ -57,6 +78,18 @@ const AssessmentManagement: React.FC = () => {
   const [importText, setImportText] = useState('');
   const [importTargetId, setImportTargetId] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [scheduleTarget, setScheduleTarget] = useState<Assessment | null>(null);
+  const [scheduleMode, setScheduleMode] = useState<'schedule' | 'reschedule'>('schedule');
+  const [scheduleForm, setScheduleForm] = useState({
+    date: '',
+    startTime: '09:00',
+    endTime: '18:00',
+    duration: 60,
+    attempts: 1,
+    timezone: 'Asia/Kolkata',
+    notes: ''
+  });
   const [formData, setFormData] = useState({
     name: '',
     department: '',
@@ -74,59 +107,16 @@ const AssessmentManagement: React.FC = () => {
       try {
         const list = await PTOService.getDepartmentCatalog();
         setDepartments(list);
-      } catch (_) {
+      } catch {
         setDepartments(['CE', 'ME', 'EEE', 'ECE', 'CSE', 'IT']);
       }
     };
     loadCatalog();
   }, []);
 
-  const handleAddAssessment = async () => {
-    if (formData.name && formData.department) {
-      const created = await PTOService.createAssessment({
-        name: formData.name,
-        department: formData.department,
-        type: formData.type,
-        duration: formData.duration,
-        date: formData.date,
-        timeWindow: formData.timeWindow,
-        attempts: formData.attempts,
-        questions: []
-      });
-      const newAssessment: Assessment = {
-        id: (created as any).id,
-        name: formData.name,
-        department: formData.department,
-        type: formData.type,
-        duration: formData.duration,
-        date: formData.date,
-        timeWindow: formData.timeWindow,
-        attempts: formData.attempts,
-        questions: 0,
-        status: 'inactive'
-      };
-      setAssessments(prev => [...prev, newAssessment]);
-      setImportTargetId(String((created as any).id));
-      setIsImportModalOpen(true);
-      resetForm();
-      setIsAddModalOpen(false);
-    }
-  };
+  // PTO manual creation removed in favor of PTS schema
 
-  const handleEditAssessment = (assessment: Assessment) => {
-    setSelectedAssessment(assessment);
-    setFormData({
-      name: assessment.name,
-      department: assessment.department,
-      type: assessment.type,
-      duration: assessment.duration,
-      date: assessment.date,
-      timeWindow: assessment.timeWindow,
-      attempts: assessment.attempts,
-      questions: assessment.questions,
-    });
-    setIsEditModalOpen(true);
-  };
+  // Edit action is not part of the streamlined PTO UX; opener removed
 
   const handleUpdateAssessment = async () => {
     if (selectedAssessment) {
@@ -155,7 +145,7 @@ const AssessmentManagement: React.FC = () => {
       await PTOService.deleteAssessment(id);
       const data = await PTOService.getAssessments();
       const mapped: Assessment[] = data.map((a: AssessDto) => ({
-        id: (a as any).id,
+        id: a.id,
         name: a.name,
         department: a.department,
         type: a.type,
@@ -170,18 +160,48 @@ const AssessmentManagement: React.FC = () => {
     }
   };
 
-  const toggleAssessmentStatus = async (id: string) => {
-    const current = assessments.find(a => a.id === id);
-    if (!current) return;
-    const nextStatus = current.status === 'active' ? 'inactive' : 'active';
-    if (nextStatus === 'active') {
-      await PTOService.enableAssessment(id);
-    } else {
-      await PTOService.disableAssessment(id);
-    }
+  const openScheduleModal = (assessment: Assessment, mode: 'schedule' | 'reschedule' = 'schedule') => {
+    setScheduleTarget(assessment);
+    setScheduleMode(mode);
+    const startIso = assessment.timeWindow?.start || '';
+    const endIso = assessment.timeWindow?.end || '';
+    const toDate = (iso: string) => (iso ? new Date(iso) : null);
+    const sd = toDate(startIso);
+    const ed = toDate(endIso);
+    const fmtDate = (d: Date | null) => (d ? `${String(d.getFullYear()).padStart(4,'0')}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}` : '');
+    const fmtTime = (d: Date | null) => (d ? `${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}` : '09:00');
+    setScheduleForm({
+      date: fmtDate(sd),
+      startTime: fmtTime(sd),
+      endTime: fmtTime(ed),
+      duration: assessment.duration || 60,
+      attempts: assessment.attempts || 1,
+      timezone: 'Asia/Kolkata',
+      notes: ''
+    });
+    setIsScheduleModalOpen(true);
+  };
+
+  const combineDateTime = (date: string, time: string) => {
+    if (!date || !time) return '';
+    const d = new Date(`${date}T${time}:00`);
+    return d.toISOString();
+  };
+
+  const submitSchedule = async () => {
+    if (!scheduleTarget) return;
+    const startISO = combineDateTime(scheduleForm.date, scheduleForm.startTime);
+    const endISO = combineDateTime(scheduleForm.date, scheduleForm.endTime);
+    await PTOService.updateAssessment(scheduleTarget.id, {
+      scheduling: { startDate: startISO, endDate: endISO, timezone: scheduleForm.timezone },
+      duration: scheduleForm.duration,
+      attempts: scheduleForm.attempts,
+      instructions: scheduleForm.notes
+    });
+    await PTOService.scheduleAssessment(scheduleTarget.id);
     const data = await PTOService.getAssessments();
     const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: (a as any).id,
+      id: a.id,
       name: a.name,
       department: a.department,
       type: a.type,
@@ -190,16 +210,17 @@ const AssessmentManagement: React.FC = () => {
       timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
       attempts: a.attempts,
       questions: a.questions,
-      status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
+      status: a.status === 'active' ? 'active' : 'inactive'
     }));
     setAssessments(mapped);
+    setIsScheduleModalOpen(false);
+    setScheduleTarget(null);
   };
 
-  const scheduleAssessment = async (id: string) => {
-    await PTOService.scheduleAssessment(id);
+  const refreshAssessments = async () => {
     const data = await PTOService.getAssessments();
     const mapped: Assessment[] = data.map((a: AssessDto) => ({
-      id: (a as any).id,
+      id: a.id,
       name: a.name,
       department: a.department,
       type: a.type,
@@ -208,14 +229,43 @@ const AssessmentManagement: React.FC = () => {
       timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
       attempts: a.attempts,
       questions: a.questions,
-      status: a.status === 'active' ? 'active' : (a.status === 'scheduled' ? 'scheduled' : 'inactive')
+      status: a.status === 'active' ? 'active' : 'inactive'
     }));
     setAssessments(mapped);
   };
 
-  const [previewData, setPreviewData] = useState<any | null>(null);
+  const handleActivate = async (id: string) => {
+    await PTOService.enableAssessment(id);
+    await refreshAssessments();
+  };
+
+  const handleDisable = async (id: string) => {
+    await PTOService.disableAssessment(id);
+    await refreshAssessments();
+  };
+
+  const handleCancelSchedule = async (id: string) => {
+    await PTOService.disableAssessment(id);
+    await refreshAssessments();
+  };
+
+  // Legacy status toggle removed in favor of explicit actions
+
+  const scheduleAssessment = (id: string) => {
+    const assessment = assessments.find(a => a.id === id);
+    if (!assessment) return;
+    openScheduleModal(assessment, 'schedule');
+  };
+
+  const rescheduleAssessment = (id: string) => {
+    const assessment = assessments.find(a => a.id === id);
+    if (!assessment) return;
+    openScheduleModal(assessment, 'reschedule');
+  };
+
+  const [previewData, setPreviewData] = useState<AssessmentDetail | null>(null);
   const handlePreview = async (assessment: Assessment) => {
-    const full = await PTOService.getAssessment(assessment.id);
+    const full = await PTOService.getAssessment(assessment.id) as AssessmentDetail;
     setSelectedAssessment({
       id: assessment.id,
       name: full?.name || assessment.name,
@@ -223,7 +273,10 @@ const AssessmentManagement: React.FC = () => {
       type: full?.type || assessment.type,
       duration: full?.duration ?? assessment.duration,
       date: full?.date || assessment.date,
-      timeWindow: full?.timeWindow || assessment.timeWindow,
+      timeWindow: {
+        start: full?.timeWindow?.start ?? assessment.timeWindow.start,
+        end: full?.timeWindow?.end ?? assessment.timeWindow.end,
+      },
       attempts: full?.attempts ?? assessment.attempts,
       questions: Array.isArray(full?.questions) ? full.questions.length : assessment.questions,
       status: (full?.status === 'active' ? 'active' : full?.status === 'inactive' ? 'inactive' : assessment.status)
@@ -245,9 +298,10 @@ const AssessmentManagement: React.FC = () => {
     });
   };
 
-  const parsePastedQuestions = (text: string) => {
+  type ParsedQuestion = { text: string; options: string[]; correctIndex: number };
+  const parsePastedQuestions = (text: string): ParsedQuestion[] => {
     const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-    const items: any[] = [];
+    const items: ParsedQuestion[] = [];
     for (const line of lines) {
       const parts = line.split('|').map(p => p.trim());
       if (parts.length >= 3) {
@@ -280,12 +334,12 @@ const AssessmentManagement: React.FC = () => {
     const data = await file.arrayBuffer();
     const wb = XLSX.read(data, { type: 'array' });
     const ws = wb.Sheets[wb.SheetNames[0]];
-    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as any[];
-    const parsed: any[] = [];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1 }) as unknown[];
+    const parsed: ParsedQuestion[] = [];
     for (const r of rows) {
       if (Array.isArray(r) && r.length >= 3) {
         const q = String(r[0] || '').trim();
-        const opts = r.slice(1, r.length - 1).map((x: any) => String(x || '').trim()).filter(Boolean);
+        const opts = r.slice(1, r.length - 1).map((x: unknown) => String(x ?? '').trim()).filter(Boolean);
         const ans = r[r.length - 1];
         let idx = parseInt(ans, 10);
         if (Number.isNaN(idx)) {
@@ -349,16 +403,18 @@ const AssessmentManagement: React.FC = () => {
               <th>Department</th>
               <th>Type</th>
               <th>Duration</th>
-              <th>Date</th>
-              <th>Questions</th>
               <th>Status</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {assessments.map(assessment => (
-              <tr key={assessment.id} onClick={(e) => e.stopPropagation()}>
-                <td>{assessment.name}</td>
+            {/* Active Section */}
+            {assessments.filter(a => a.status === 'active').length > 0 && (
+              <tr><td colSpan={8}><strong>Active</strong></td></tr>
+            )}
+            {assessments.filter(a => a.status === 'active').map(assessment => (
+              <tr key={`active-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                <td>{assessment.name || '(Untitled)'} </td>
                 <td>{assessment.department}</td>
                 <td>
                   <span className={`type-badge ${assessment.type}`}>
@@ -366,180 +422,77 @@ const AssessmentManagement: React.FC = () => {
                   </span>
                 </td>
                 <td>{assessment.duration} min</td>
-                <td>{assessment.date}</td>
-                <td>{assessment.questions}</td>
                 <td>
-                  <div className="status-actions">
-                    <button
-                      className={`status-toggle ${assessment.status}`}
-                      onClick={() => toggleAssessmentStatus(assessment.id)}
-                    >
-                      {assessment.status === 'active' ? (
-                        <><FaToggleOn /> Active</>
-                      ) : (
-                        <><FaToggleOff /> Inactive</>
-                      )}
-                    </button>
-                    <button
-                      className="text-btn"
-                      onClick={() => scheduleAssessment(assessment.id)}
-                      title="Schedule"
-                      type="button"
-                    >
-                      Schedule
-                    </button>
-                  </div>
+                  <span className={`status-badge ${assessment.status}`}>Active</span>
                 </td>
                 <td>
                   <div className="action-buttons">
-                    <button 
-                      className="icon-btn preview-btn" 
-                      onClick={() => handlePreview(assessment)}
-                      title="Preview"
-                    >
-                      <FaEye />
-                    </button>
-                    <button 
-                      className="edit-btn text-btn" 
-                      onClick={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleEditAssessment(assessment);
-                      }}
-                      onMouseDown={(e) => e.stopPropagation()}
-                      title="Edit"
-                      type="button"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      className="text-btn"
-                      onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }}
-                      title="Import Questions"
-                      type="button"
-                    >
-                      Import
-                    </button>
-                    <button 
-                      className="icon-btn delete-btn" 
-                      onClick={() => handleDeleteAssessment(assessment.id)}
-                      title="Delete"
-                    >
-                      <FaTrash />
-                    </button>
+                    <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                    <button className="text-btn" onClick={() => handleDisable(assessment.id)} title="Disable" type="button">Disable</button>
+                    <button className="text-btn" onClick={(e) => { e.preventDefault(); e.stopPropagation(); setImportTargetId(assessment.id); setIsImportModalOpen(true); }} title="Import Questions" type="button">Import</button>
                   </div>
                 </td>
               </tr>
             ))}
+
+            
+
+            {/* Inactive Section */}
+            {assessments.filter(a => a.status === 'inactive').length > 0 && (
+              <tr><td colSpan={8}><strong>Inactive</strong></td></tr>
+            )}
+              {assessments.filter(a => a.status === 'inactive').map(assessment => (
+                <tr key={`inactive-${assessment.id}`} onClick={(e) => e.stopPropagation()}>
+                  <td>{assessment.name || '(Untitled)'} </td>
+                  <td>{assessment.department}</td>
+                  <td>
+                    <span className={`type-badge ${assessment.type}`}>
+                      {assessment.type === 'department-wise' ? 'Dept-wise' : 'College-wide'}
+                    </span>
+                  </td>
+                <td>{assessment.duration} min</td>
+                <td>
+                  <span className={`status-badge ${assessment.status}`}>Inactive</span>
+                </td>
+                  <td>
+                    <div className="action-buttons">
+                      <button className="icon-btn preview-btn" onClick={() => handlePreview(assessment)} title="View"><FaEye /></button>
+                      <button className="text-btn" onClick={() => handleActivate(assessment.id)} title="Activate" type="button">Activate</button>
+                      <button className="icon-btn delete-btn" onClick={() => handleDeleteAssessment(assessment.id)} title="Delete"><FaTrash /></button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
           </tbody>
         </table>
       </div>
 
-      {/* Add Assessment Modal */}
+      {/* Add Assessment Modal replaced with PTS schema */}
       {isAddModalOpen && (
         <div className="modal-overlay" onClick={() => setIsAddModalOpen(false)}>
-          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+          <div className="modal-content large" onClick={(e) => e.stopPropagation()} style={{ width: '95vw', maxWidth: '1200px', maxHeight: '80vh' }}>
             <h3>Create Assessment</h3>
-            <div className="form-group">
-              <label>Assessment Name</label>
-              <input
-                type="text"
-                value={formData.name}
-                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                placeholder="Enter assessment name"
-              />
-            </div>
-            <div className="form-group">
-              <label>Type</label>
-              <select
-                value={formData.type}
-                onChange={(e) => setFormData({ ...formData, type: e.target.value as 'department-wise' | 'college-wide' })}
-              >
-                <option value="department-wise">Department-wise</option>
-                <option value="college-wide">College-wide</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label>Department</label>
-              <select
-                value={formData.department}
-                onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-              >
-                <option value="">Select Department</option>
-                {departments.map(dept => (
-                  <option key={dept} value={dept}>{dept}</option>
-                ))}
-              </select>
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Duration (minutes)</label>
-                <input
-                  type="number"
-                  value={formData.duration}
-                  onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) })}
-                  min="1"
-                />
-              </div>
-              <div className="form-group">
-                <label>Number of Attempts</label>
-                <input
-                  type="number"
-                  value={formData.attempts}
-                  onChange={(e) => setFormData({ ...formData, attempts: parseInt(e.target.value) })}
-                  min="1"
-                />
-              </div>
-            </div>
-            <div className="form-group">
-              <label>Date</label>
-              <input
-                type="date"
-                value={formData.date}
-                onChange={(e) => setFormData({ ...formData, date: e.target.value })}
-              />
-            </div>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Time Window Start</label>
-                <input
-                  type="time"
-                  value={formData.timeWindow.start}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    timeWindow: { ...formData.timeWindow, start: e.target.value }
-                  })}
-                />
-              </div>
-              <div className="form-group">
-                <label>Time Window End</label>
-                <input
-                  type="time"
-                  value={formData.timeWindow.end}
-                  onChange={(e) => setFormData({ 
-                    ...formData, 
-                    timeWindow: { ...formData.timeWindow, end: e.target.value }
-                  })}
-                />
-              </div>
-            </div>
-            <div className="upload-section">
-              <label>Upload Questions</label>
-              <div className="upload-options">
-                <button type="button" className="upload-btn">
-                  <FaUpload /> Copy-Paste
-                </button>
-                <button type="button" className="upload-btn">
-                  <FaFileExcel /> Import Excel
-                </button>
-                <button type="button" className="upload-btn">
-                  <FaUpload /> Import Text File
-                </button>
-              </div>
+            <div style={{ height: 'calc(80vh - 64px)', overflow: 'auto' }}>
+              <PTSAssessmentCreation />
             </div>
             <div className="modal-actions">
-              <button className="primary-btn" onClick={handleAddAssessment}>Create</button>
-              <button className="secondary-btn" onClick={() => setIsAddModalOpen(false)}>Cancel</button>
+              <button className="secondary-btn" onClick={async () => {
+                setIsAddModalOpen(false);
+                const data = await PTOService.getAssessments();
+                const mapped: Assessment[] = data.map((a: AssessDto) => ({
+                  id: a.id,
+                  name: a.name,
+                  department: a.department,
+                  type: a.type,
+                  duration: a.duration,
+                  date: a.date,
+                  timeWindow: { start: (a.timeWindow?.start || ''), end: (a.timeWindow?.end || '') },
+                  attempts: a.attempts,
+                  questions: a.questions,
+                  status: a.status === 'active' ? 'active' : 'inactive'
+                }));
+                setAssessments(mapped);
+              }}>Close</button>
             </div>
           </div>
         </div>
@@ -673,7 +626,7 @@ const AssessmentManagement: React.FC = () => {
                 <div className="preview-item">
                   <strong>Question List:</strong>
                   <div>
-                    {previewData.questions.map((q: any, idx: number) => (
+                    {previewData.questions.map((q: Question, idx: number) => (
                       <div key={q.id || idx} style={{ marginTop: '8px' }}>
                         <div>{idx + 1}. {q.text}</div>
                         {Array.isArray(q.options) && q.options.length > 0 && (
@@ -732,6 +685,54 @@ const AssessmentManagement: React.FC = () => {
             <div className="modal-actions">
               <button className="primary-btn" onClick={handleImportSubmit} disabled={!importText.trim() || !importTargetId}>Import</button>
               <button className="secondary-btn" onClick={() => setIsImportModalOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isScheduleModalOpen && scheduleTarget && (
+        <div className="modal-overlay" onClick={() => setIsScheduleModalOpen(false)}>
+          <div className="modal-content large" onClick={(e) => e.stopPropagation()}>
+            <h3>{scheduleMode === 'reschedule' ? 'Reschedule Assessment' : 'Schedule Assessment'}</h3>
+            <div className="form-group">
+              <label>Date</label>
+              <input type="date" value={scheduleForm.date} onChange={(e) => setScheduleForm({ ...scheduleForm, date: e.target.value })} />
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Start Time</label>
+                <input type="time" value={scheduleForm.startTime} onChange={(e) => setScheduleForm({ ...scheduleForm, startTime: e.target.value })} />
+              </div>
+              <div className="form-group">
+                <label>End Time</label>
+                <input type="time" value={scheduleForm.endTime} onChange={(e) => setScheduleForm({ ...scheduleForm, endTime: e.target.value })} />
+              </div>
+            </div>
+            <div className="form-row">
+              <div className="form-group">
+                <label>Duration (minutes)</label>
+                <input type="number" min={1} value={scheduleForm.duration} onChange={(e) => setScheduleForm({ ...scheduleForm, duration: parseInt(e.target.value) || 1 })} />
+              </div>
+              <div className="form-group">
+                <label>Attempts</label>
+                <input type="number" min={1} value={scheduleForm.attempts} onChange={(e) => setScheduleForm({ ...scheduleForm, attempts: parseInt(e.target.value) || 1 })} />
+              </div>
+            </div>
+            <div className="form-group">
+              <label>Timezone</label>
+              <select value={scheduleForm.timezone} onChange={(e) => setScheduleForm({ ...scheduleForm, timezone: e.target.value })}>
+                <option value="Asia/Kolkata">Asia/Kolkata (IST)</option>
+                <option value="UTC">UTC</option>
+                <option value="Europe/Paris">Europe/Paris</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label>Notes (optional)</label>
+              <textarea rows={4} placeholder="Any scheduling notes or instructions" value={scheduleForm.notes} onChange={(e) => setScheduleForm({ ...scheduleForm, notes: e.target.value })} />
+            </div>
+            <div className="modal-actions">
+              <button className="primary-btn" onClick={submitSchedule}>{scheduleMode === 'reschedule' ? 'Save' : 'Schedule'}</button>
+              <button className="secondary-btn" onClick={() => setIsScheduleModalOpen(false)}>Cancel</button>
             </div>
           </div>
         </div>
