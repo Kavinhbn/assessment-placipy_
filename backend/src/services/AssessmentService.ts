@@ -472,9 +472,8 @@ class AssessmentService {
             console.log('Query result:', JSON.stringify(queryResult, null, 2));
 
             if (!queryResult.Items || queryResult.Items.length === 0) {
-                console.log('No assessment found with ID:', assessmentId);
                 console.log('No assessment found with ID:', assessmentId, 'and domain:', domain);
-                // Removed default domain fallback
+                // Don't scan, just return null when not found in specific domain
                 return null;
             }
 
@@ -488,6 +487,7 @@ class AssessmentService {
 
             if (!assessment) {
                 console.log('No exact assessment match found with ID:', assessmentId, 'and domain:', domain);
+                // Don't scan, just return null when not found in specific domain
                 return null;
             }
 
@@ -741,7 +741,7 @@ class AssessmentService {
             console.log('Assessment verification result:', JSON.stringify(mainAssessmentResult, null, 2));
 
             if (!mainAssessmentResult.Items || mainAssessmentResult.Items.length === 0) {
-                // Removed default domain fallback
+                // Don't scan, just throw an error when not found in specific domain
                 throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
@@ -845,6 +845,7 @@ class AssessmentService {
             
             if (!assessment) {
                 console.log(`Assessment ${assessmentId} not found for domain ${domain}`);
+                // Don't scan, just throw an error when not found in specific domain
                 throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
@@ -869,7 +870,7 @@ class AssessmentService {
             const timestamp = new Date().toISOString();
 
             // First, get the current item to understand its structure
-            // Use query instead of scan for better performance
+            // Use query with the specific domain
             const getCurrentItemParams = {
                 TableName: this.assessmentsTableName,
                 KeyConditionExpression: 'PK = :pk AND begins_with(SK, :sk_prefix)',
@@ -883,23 +884,9 @@ class AssessmentService {
             const currentItemResult = await dynamodb.query(getCurrentItemParams).promise();
             const currentItem = currentItemResult.Items && currentItemResult.Items[0];
 
+            // If not found with specific domain, throw an error instead of scanning
             if (!currentItem) {
-                // If not found with specific domain, try scanning (less efficient)
-                const scanParams = {
-                    TableName: this.assessmentsTableName,
-                    FilterExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
-                    ExpressionAttributeValues: {
-                        ':sk': `ASSESSMENT#${assessmentId}`,
-                        ':pk_prefix': 'CLIENT#'
-                    }
-                };
-
-                const scanResult = await dynamodb.scan(scanParams).promise();
-                const scannedItem = scanResult.Items && scanResult.Items[0];
-                
-                if (!scannedItem) {
-                    throw new Error('Assessment not found');
-                }
+                throw new Error(`Assessment ${assessmentId} not found for domain ${updates.domain || 'unknown'}`);
             }
 
             // Build update expression
@@ -1085,24 +1072,23 @@ class AssessmentService {
         }
     }
 
-    async deleteAssessment(assessmentId: string): Promise<void> {
+    async deleteAssessment(assessmentId: string, domain: string): Promise<void> {
         try {
-            // First, find the assessment by scanning since we don't know the domain
-            // In a production environment, you'd want to pass the domain as a parameter
+            // First, find the assessment by querying with the specific domain
             const getAssessmentParams = {
                 TableName: this.assessmentsTableName,
-                FilterExpression: 'SK = :sk AND begins_with(PK, :pk_prefix)',
+                KeyConditionExpression: 'PK = :pk AND SK = :sk',
                 ExpressionAttributeValues: {
-                    ':sk': `ASSESSMENT#${assessmentId}`,
-                    ':pk_prefix': 'CLIENT#'
+                    ':pk': `CLIENT#${domain}`,
+                    ':sk': `ASSESSMENT#${assessmentId}`
                 }
             };
 
-            const assessmentResult = await dynamodb.scan(getAssessmentParams).promise();
+            const assessmentResult = await dynamodb.query(getAssessmentParams).promise();
             const assessment = assessmentResult.Items && assessmentResult.Items[0];
 
             if (!assessment) {
-                throw new Error('Assessment not found');
+                throw new Error(`Assessment ${assessmentId} not found for domain ${domain}`);
             }
 
             // Delete main assessment from assessments table
