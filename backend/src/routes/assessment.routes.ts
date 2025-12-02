@@ -2,6 +2,7 @@
 const express = require('express');
 const authMiddleware = require('../auth/auth.middleware');
 const assessmentService = require('../services/AssessmentService');
+const notificationService = require('../services/NotificationService');
 
 const router = express.Router();
 
@@ -48,16 +49,110 @@ router.get('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const { id } = req.params;
         // Extract domain from user email
         const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
+        
+        // Validate assessment ID
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+        
+        console.log(`Calling getAssessmentById with id: ${id}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentById(id, domain);
+        
+        // Check if we got a result
+        if (!result) {
+            console.log(`Assessment ${id} not found for domain ${domain}`);
+            return res.status(404).json({
+                success: false,
+                message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
+            });
+        }
+        
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment'
+        });
+    }
+});
+
+// Get assessment by ID with questions (enhanced version)
+router.get('/:id/with-questions', authMiddleware.authenticateToken, async (req, res) => {
+    try {
+        console.log('=== Get Assessment With Questions Request ===');
+        console.log('User:', req.user);
+        console.log('Params:', req.params);
+        console.log('Assessment service methods:', Object.keys(assessmentService));
+
+        const { id } = req.params;
+        // Extract domain from user email
+        const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
+        
+        // Validate assessment ID
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+        
+        // Check if the method exists
+        if (typeof assessmentService.getAssessmentWithQuestions !== 'function') {
+            console.error('getAssessmentWithQuestions method not found on assessmentService');
+            return res.status(500).json({
+                success: false,
+                message: 'Method not implemented'
+            });
+        }
+        
+        console.log(`Calling getAssessmentWithQuestions with id: ${id}, domain: ${domain}`);
+        const result = await assessmentService.getAssessmentWithQuestions(id, domain);
+        
+        // Check if we got a result
+        if (!result) {
+            console.log(`Assessment ${id} not found for domain ${domain}`);
+            return res.status(404).json({
+                success: false,
+                message: `Assessment ${id} not found for domain ${domain}. Please check if the assessment exists and you have access to it.`
+            });
+        }
+        
+        res.status(200).json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        console.error('Error fetching assessment with questions:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
+        res.status(500).json({
+            success: false,
+            message: error.message || 'Failed to fetch assessment with questions'
         });
     }
 });
@@ -72,14 +167,39 @@ router.get('/:id/questions', authMiddleware.authenticateToken, async (req, res) 
         const { id: assessmentId } = req.params;
         // Extract domain from user email or use default
         const domain = req.user.email ? req.user.email.split('@')[1] : 'ksrce.ac.in';
+        console.log('Extracted domain from user email:', domain);
 
+        // Validate assessment ID
+        if (!assessmentId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Assessment ID is required'
+            });
+        }
+
+        console.log(`Calling getAssessmentQuestions with id: ${assessmentId}, domain: ${domain}`);
         const result = await assessmentService.getAssessmentQuestions(assessmentId, domain);
+        
+        // Check if assessment exists but has no questions
+        if (result && Array.isArray(result) && result.length === 0) {
+            console.log(`Assessment ${assessmentId} exists but has no questions`);
+        }
+        
         res.status(200).json({
             success: true,
             data: result
         });
     } catch (error: any) {
         console.error('Error fetching assessment questions:', error);
+        
+        // Provide more specific error messages
+        if (error.message && error.message.includes('not found')) {
+            return res.status(404).json({
+                success: false,
+                message: error.message
+            });
+        }
+        
         res.status(500).json({
             success: false,
             message: error.message || 'Failed to fetch assessment questions'
@@ -147,6 +267,47 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         });
 
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
+        
+        // Send notifications if assessment is published
+        if (assessmentData.isPublished && result) {
+            try {
+                const domain = createdBy.split('@')[1] || 'ksrce.ac.in';
+                let studentEmails: string[] = [];
+
+                // Get target students based on departments
+                if (assessmentData.targetDepartments && assessmentData.targetDepartments.length > 0) {
+                    for (const dept of assessmentData.targetDepartments) {
+                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
+                        studentEmails.push(...deptStudents);
+                    }
+                } else {
+                    // Get all students for the domain
+                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                }
+
+                // Remove duplicates
+                studentEmails = [...new Set(studentEmails)];
+
+                // Send notifications
+                const priority = assessmentData.scheduling?.startDate ? 'medium' : 'medium';
+                await notificationService.createNotificationsForStudents(
+                    studentEmails,
+                    'assessment_published',
+                    `New Assessment: ${assessmentData.title}`,
+                    assessmentData.scheduling?.startDate 
+                        ? `A new assessment "${assessmentData.title}" has been published and is scheduled.`
+                        : `A new assessment "${assessmentData.title}" has been published.`,
+                    `/student/assessments/${result.assessmentId || result.assessmentId}`,
+                    priority,
+                    { assessmentId: result.assessmentId || result.assessmentId }
+                );
+                console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+            } catch (notifError) {
+                console.error('Error sending notifications:', notifError);
+                // Don't fail the request if notifications fail
+            }
+        }
+        
         res.status(201).json({
             success: true,
             data: result
@@ -211,7 +372,53 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         // Add the updatedByName to the assessment data
         assessmentData.updatedByName = updatedByName;
 
+        // Check if assessment is being published (isPublished changing from false to true)
+        const wasPublished = assessmentData.wasPublished === false || assessmentData.wasPublished === undefined;
+        const isBeingPublished = assessmentData.isPublished === true && wasPublished;
+
         const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
+        
+        // Send notifications if assessment is being published
+        if (isBeingPublished && result) {
+            try {
+                const domain = updatedBy.split('@')[1] || 'ksrce.ac.in';
+                let studentEmails: string[] = [];
+
+                // Get target students based on departments
+                const targetDepts = assessmentData.targetDepartments || result.target?.departments || [];
+                if (targetDepts.length > 0) {
+                    for (const dept of targetDepts) {
+                        const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
+                        studentEmails.push(...deptStudents);
+                    }
+                } else {
+                    // Get all students for the domain
+                    studentEmails = await notificationService.getStudentsByDomain(domain);
+                }
+
+                // Remove duplicates
+                studentEmails = [...new Set(studentEmails)];
+
+                // Send notifications
+                const priority = (assessmentData.scheduling?.startDate || result.scheduling?.startDate) ? 'medium' : 'medium';
+                await notificationService.createNotificationsForStudents(
+                    studentEmails,
+                    'assessment_published',
+                    `New Assessment: ${result.title || assessmentData.title}`,
+                    (assessmentData.scheduling?.startDate || result.scheduling?.startDate)
+                        ? `A new assessment "${result.title || assessmentData.title}" has been published and is scheduled.`
+                        : `A new assessment "${result.title || assessmentData.title}" has been published.`,
+                    `/student/assessments/${id}`,
+                    priority,
+                    { assessmentId: id }
+                );
+                console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+            } catch (notifError) {
+                console.error('Error sending notifications:', notifError);
+                // Don't fail the request if notifications fail
+            }
+        }
+        
         res.status(200).json({
             success: true,
             data: result
@@ -414,6 +621,15 @@ router.post('/import/csv', authMiddleware.authenticateToken, async (req, res) =>
             message: error.message || 'Failed to import assessments from CSV'
         });
     }
+});
+
+// Test endpoint to check if routes are working
+router.get('/test-route', authMiddleware.authenticateToken, async (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: 'Test route is working',
+        timestamp: new Date().toISOString()
+    });
 });
 
 module.exports = router;

@@ -5,6 +5,8 @@ const dotenv = require('dotenv');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
 
+console.log('Loading routes...');
+
 // Import routes
 const userRoutes = require('./routes/user.routes');
 const assessmentRoutes = require('./routes/assessment.routes');
@@ -13,6 +15,11 @@ const studentRoutes = require('./routes/student.routes');
 const adminRoutes = require('./routes/admin.routes');
 const ptoRoutes = require('./routes/pto.routes');
 const codeEvaluationRoutes = require('./routes/codeEvaluation.routes');
+const resultsRoutes = require('./routes/results.routes');
+const studentAssessmentRoutes = require('./routes/student.assessment.routes');
+const studentSubmissionRoutes = require('./routes/student.submission.routes');
+
+console.log('Routes loaded successfully');
 
 // Import middleware
 const { authenticateToken, authorizeRole } = require('./auth/auth.middleware');
@@ -20,7 +27,7 @@ const { authenticateToken, authorizeRole } = require('./auth/auth.middleware');
 dotenv.config();
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3005;
 
 // Security middleware
 app.use(helmet());
@@ -45,6 +52,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
 // Routes
+console.log('Registering routes...');
 app.use('/api/users', userRoutes);
 app.use('/api/assessments', assessmentRoutes);
 app.use('/api/analytics', analyticsRoutes);
@@ -52,6 +60,10 @@ app.use('/api/students', studentRoutes);
 app.use('/api/admin', adminRoutes);
 app.use('/api/pto', ptoRoutes);
 app.use('/api/code-evaluation', codeEvaluationRoutes);
+app.use('/api/results', resultsRoutes);
+app.use('/api/student-assessments', studentAssessmentRoutes);
+app.use('/api/student', studentSubmissionRoutes);
+console.log('Routes registered successfully');
 
 // Health check endpoint
 app.get('/health', (req, res) => {
@@ -74,9 +86,10 @@ app.use((err, req, res, next) => {
 
 // 404 handler
 app.use((req, res) => {
+    console.log('404 - Route not found:', req.method, req.url);
     res.status(404).json({
         error: 'Not Found',
-        message: 'Route not found'
+        message: 'Route not found: ' + req.url
     });
 });
 

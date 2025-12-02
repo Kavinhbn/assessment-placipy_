@@ -1,12 +1,27 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import './AssessmentTaking.css';
 import judge0Service, { type SubmissionResult } from '../../services/judge0.service';
+import StudentAssessmentService from '../../services/student.assessment.service';
+import ResultsService from '../../services/results.service';
+import { useUser } from '../../contexts/UserContext';
+import AuthService from '../../services/auth.service';
+
+// Define interfaces for assessment data
+interface MCQOption {
+  id: string;
+  text: string;
+}
 
 interface MCQQuestion {
-  id: number;
+  questionId: string;
   question: string;
-  options: string[];
-  correctAnswer: number;
+  options: MCQOption[];
+  correctAnswer?: string[] | string;
+  points?: number;
+  difficulty?: string;
+  subcategory?: string;
+  examples?: { input: string; output: string }[];
 }
 
 interface TestCase {
@@ -15,17 +30,64 @@ interface TestCase {
   description?: string;
 }
 
-interface CodingChallenge {
-  id: number;
+interface CodingQuestion {
+  questionId: string;
+  question: string;
+  starterCode?: string;
+  testCases?: TestCase[];
+  points?: number;
+  difficulty?: string;
+  subcategory?: string;
+  examples?: { input: string; output: string }[];
+}
+
+interface AssessmentConfiguration {
+  duration: number;
+  maxAttempts: number;
+  passingScore: number;
+  randomizeQuestions: boolean;
+  totalQuestions: number;
+}
+
+interface AssessmentEntity {
+  type: string;
+  batch: string;
+  description?: string;
+}
+
+interface AssessmentScheduling {
+  startDate: string;
+  endDate: string;
+  timezone: string;
+}
+
+interface AssessmentData {
+  assessmentId: string;
   title: string;
   description: string;
-  examples: { input: string; output: string }[];
-  testCases: TestCase[];
+  category: string[];
+  configuration: AssessmentConfiguration;
+  entities: AssessmentEntity[];
+  scheduling: AssessmentScheduling;
+  questions: (MCQQuestion | CodingQuestion)[];
+  mcqQuestions?: MCQQuestion[];
+  codingQuestions?: CodingQuestion[];
+  allQuestions?: (MCQQuestion | CodingQuestion)[];
+  department?: string; // Department chosen for the assessment
+  departmentCode?: string; // Department code (e.g., "CSE", "ALL")
+  // Add other fields as needed
 }
 
 const AssessmentTaking: React.FC = () => {
-  console.log('AssessmentTaking component rendering');
-  console.log('Initial state - currentCodingIndex:', 0, 'selectedLanguage:', 'javascript');
+  // Get assessmentId from URL params
+  const { assessmentId } = useParams<{ assessmentId: string }>();
+  const navigate = useNavigate();
+  const { user } = useUser();
+  
+  // State for assessment data
+  const [assessmentData, setAssessmentData] = useState<AssessmentData | null>(null);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
   
   // State for tabs
   const [activeTab, setActiveTab] = useState<'mcq' | 'coding'>('mcq');
@@ -39,252 +101,563 @@ const AssessmentTaking: React.FC = () => {
   
   // State for MCQ section
   const [currentMCQIndex, setCurrentMCQIndex] = useState<number>(0);
-  const [mcqAnswers, setMcqAnswers] = useState<{[key: number]: number}>({});
+  const [mcqAnswers, setMcqAnswers] = useState<{[key: string]: number}>({});
   
   // State for coding section
   const [currentCodingIndex, setCurrentCodingIndex] = useState<number>(0);
   const [selectedLanguage, setSelectedLanguage] = useState<string>('javascript');
-  const [code, setCode] = useState<{[key: number]: {[key: string]: string}}>({});
-  const [executionResult, setExecutionResult] = useState<{[key: number]: SubmissionResult}>({});
-  const [testCaseResults, setTestCaseResults] = useState<{[key: number]: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[]}>({});
+  const [code, setCode] = useState<{[key: string]: {[key: string]: string}}>({});
+  const [executionResult, setExecutionResult] = useState<{[key: string]: SubmissionResult}>({});
+  const [testCaseResults, setTestCaseResults] = useState<{[key: string]: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[]}>({});
   const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false);
+  // State to track which coding challenges have been successfully executed without errors
+  const [successfulExecutions, setSuccessfulExecutions] = useState<Record<string, boolean>>({});
   const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Disable auto-run by default
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [customInput, setCustomInput] = useState<string>('');
   
   // State for assessment completion
   const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false);
-  
-
+  const [submitted, setSubmitted] = useState(false);
+  const [mcqResults, setMcqResults] = useState<any>(null);
+  const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
   const codeEditorRef = useRef<HTMLTextAreaElement>(null);
   const autoRunTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const hasFetchedData = useRef(false); // To prevent multiple API calls
   
-  // Debug effect to monitor component mount/unmount
+  // Memoized function to extract questions
+  const { mcqQuestions, codingChallenges } = React.useMemo(() => {
+    if (!assessmentData) {
+      return { mcqQuestions: [], codingChallenges: [] };
+    }
+    
+    // Extract MCQ questions from assessment data
+    const mcqQuestions: MCQQuestion[] = assessmentData?.mcqQuestions || 
+      assessmentData?.questions?.filter((q): q is MCQQuestion => 'options' in q) || [];
+    
+    // Extract coding challenges from assessment data
+    const codingChallenges: CodingQuestion[] = assessmentData?.codingQuestions || 
+      assessmentData?.questions?.filter((q): q is CodingQuestion => 'starterCode' in q || 'testCases' in q) || [];
+    
+    return { mcqQuestions, codingChallenges };
+  }, [assessmentData]);
+  
+  // Get current challenge safely
+  const currentChallenge = codingChallenges[currentCodingIndex];
+  
+  // Preprocess React code to make it runnable in a Node.js environment
+  const preprocessReactCode = (code: string): string => {
+    if (!code.trim()) return code;
+    
+    // Simple approach: Remove JSX syntax and extract JavaScript logic
+    try {
+      // Remove comments first
+      let cleanCode = code.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/.*$/gm, '');
+      
+      // Extract JavaScript logic by removing JSX tags but preserving the code structure
+      // This is a simplified approach for basic React code testing
+      
+      // Extract function definitions (more comprehensive)
+      const functionRegex = /(function\s+\w+\s*\([^)]*\)\s*{[\s\S]*?})|(const\s+\w+\s*=\s*\([^)]*\)\s*=>\s*{[\s\S]*?})|(let\s+\w+\s*=\s*\([^)]*\)\s*=>\s*{[\s\S]*?})|(var\s+\w+\s*=\s*\([^)]*\)\s*=>\s*{[\s\S]*?})/g;
+      const functionMatches = cleanCode.match(functionRegex) || [];
+      
+      // Extract variable declarations
+      const varRegex = /(const|let|var)\s+\w+\s*=\s*[^;]*;/g;
+      const varMatches = cleanCode.match(varRegex) || [];
+      
+      // Extract console.log statements
+      const logRegex = /console\.log\([^;]*\);/g;
+      const logMatches = cleanCode.match(logRegex) || [];
+      
+      // Combine all extracted JavaScript
+      let extractedJS = '';
+      
+      // Add functions
+      if (functionMatches.length > 0) {
+        extractedJS += functionMatches.join('\n\n') + '\n\n';
+      }
+      
+      // Add variables
+      if (varMatches.length > 0) {
+        extractedJS += varMatches.join('\n') + '\n\n';
+      }
+      
+      // Add console logs
+      if (logMatches.length > 0) {
+        extractedJS += logMatches.join('\n') + '\n\n';
+      }
+      
+      // If we found JavaScript logic, execute it
+      if (extractedJS.trim()) {
+        return `
+// Extracted JavaScript logic from React code
+${extractedJS}
+console.log("React JavaScript logic executed successfully");
+`;
+      }
+      
+      // Fallback: If no clear JavaScript logic found, just run the code with error handling
+      // But first, try to make JSX compatible by commenting out JSX lines
+      const lines = code.split('\n');
+      const processedLines = lines.map(line => {
+        // If line contains JSX tags, comment it out
+        if (line.trim().startsWith('<') && line.includes('>')) {
+          return '// ' + line; // Comment out JSX lines
+        }
+        return line;
+      });
+      
+      return `
+// Processed React code (JSX lines commented out)
+try {
+  ${processedLines.join('\n')}
+  console.log("React code processed successfully");
+} catch (error) {
+  console.error("Error in React code:", error.message);
+}
+`;
+      
+    } catch (error) {
+      // If all else fails, provide a safe fallback
+      return `
+console.log("React/JSX code detected:");
+console.log("In a browser environment, this would render a React component");
+console.log("Component content preview:");
+console.log(\`${code.substring(0, 200)}${code.length > 200 ? '...' : ''}\`);
+`;
+    }
+  };
+  
+  // Preprocess HTML code to make it runnable
+  const preprocessHtmlCode = (code: string): string => {
+    if (!code.trim()) return code;
+    
+    // Check if this is HTML with script tags
+    const scriptMatches = code.match(/<script[^>]*>([\s\S]*?)<\/script>/gi);
+    
+    if (scriptMatches && scriptMatches.length > 0) {
+      // Extract JavaScript from script tags
+      let jsCode = '';
+      scriptMatches.forEach(match => {
+        const innerCode = match.replace(/<script[^>]*>|<\/script>/gi, '').trim();
+        if (innerCode) {
+          jsCode += innerCode + '\n';
+        }
+      });
+      
+      if (jsCode.trim()) {
+        return `
+// Extracted JavaScript from HTML
+try {
+  ${jsCode}
+  console.log("JavaScript from HTML executed successfully");
+} catch (error) {
+  console.error("Error in HTML JavaScript:", error.message);
+}
+`;
+      }
+    }
+    
+    // If no script tags or no executable JavaScript, treat as plain text
+    return `
+// HTML code detected
+console.log("HTML content:");
+console.log(\`${code.substring(0, 200)}${code.length > 200 ? '...' : ''}\`);
+console.log("In a browser environment, this would render as HTML");
+`;
+  };
+
+  // Run code function with proper type checking
+  const runCode = useCallback(async (inputType: 'test' | 'example' | 'custom' = 'test') => {
+    // Ensure we have a valid challenge
+    if (!currentChallenge) {
+      return;
+    }
+    
+    // Get current code for the challenge and language
+    let currentCode = code[currentChallenge.questionId]?.[selectedLanguage] || '';
+    
+    // Preprocess code for specific languages
+    if (selectedLanguage === 'react') {
+      // For React, we need to wrap the code in a basic React environment simulation
+      // Since Judge0 can't run React directly, we'll convert it to runnable JavaScript
+      currentCode = preprocessReactCode(currentCode);
+    } else if (selectedLanguage === 'html') {
+      // For HTML, we might want to wrap it in a basic HTML structure
+      currentCode = preprocessHtmlCode(currentCode);
+    }
+    
+    try {
+      setIsLoading(true);
+      
+      if (inputType === 'test') {
+        // Run all test cases
+        await runTestCases(currentCode);
+      } else {
+        // Get input based on input type
+        let input = '';
+        if (inputType === 'example' && currentChallenge.examples && currentChallenge.examples[0]) {
+          input = currentChallenge.examples[0].input;
+        } else if (inputType === 'custom') {
+          input = customInput;
+        }
+        
+        // Execute code using Judge0 service
+        const result = await judge0Service.executeCode(currentCode, selectedLanguage, input);
+        
+        setExecutionResult(prev => ({
+          ...prev,
+          [currentChallenge.questionId]: result
+        }));
+        
+        // Mark as successful execution if no compilation or runtime errors
+        if (!result.compile_output && !result.stderr) {
+          setSuccessfulExecutions(prev => ({
+            ...prev,
+            [currentChallenge.questionId]: true
+          }));
+        } else {
+          // Mark as unsuccessful execution if there are errors
+          setSuccessfulExecutions(prev => ({
+            ...prev,
+            [currentChallenge.questionId]: false
+          }));
+        }
+      }
+    } catch (error) {
+      // Provide a more user-friendly error message for rate limiting
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      if (errorMessage.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. The system is temporarily busy. Please wait a moment and try again.';
+      } else if (errorMessage.includes('API key')) {
+        errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
+      } else if (errorMessage.includes('Failed to submit code')) {
+        errorMessage = 'Failed to connect to the code execution service. Please check your internet connection and try again.';
+      }
+      
+      setExecutionResult(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: {
+          status: { id: 0, description: 'Error' },
+          stdout: '',
+          stderr: errorMessage,
+          compile_output: '',
+          message: '',
+          time: '',
+          memory: 0
+        }
+      }));
+      
+      // Mark as unsuccessful execution due to error
+      setSuccessfulExecutions(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: false
+      }));
+    } finally {
+      setIsLoading(false);
+    }
+  }, [currentChallenge, code, selectedLanguage, customInput]);
+  
+  // Utility function for delay
+  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
+  
+  // Run all test cases for current challenge
+  const runTestCases = useCallback(async (codeToTest: string) => {
+    try {
+      const currentChallenge = codingChallenges[currentCodingIndex];
+      if (!currentChallenge) return;
+      
+      // Check if testCases exist before accessing
+      if (!currentChallenge.testCases) {
+        // Mark as successful execution if no test cases
+        setSuccessfulExecutions(prev => ({
+          ...prev,
+          [currentChallenge.questionId]: true
+        }));
+        return;
+      }
+      
+      const results: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[] = [];
+      
+      // Run each test case with delay to avoid rate limiting
+      for (let i = 0; i < currentChallenge.testCases.length; i++) {
+        const testCase = currentChallenge.testCases[i];
+        
+        try {
+          // Preprocess input for array inputs in specific languages
+          let processedInput = testCase.input;
+          
+          // For Python and JavaScript, convert array string to actual array if needed
+          if ((selectedLanguage === 'python' || selectedLanguage === 'javascript') && 
+              testCase.input.startsWith('[') && testCase.input.endsWith(']')) {
+            // Input is already in correct format for these languages
+          }
+          
+          const result = await judge0Service.executeCode(codeToTest, selectedLanguage, processedInput);
+          
+          // Normalize output for comparison (remove trailing newlines and whitespace)
+          const actualOutput = (result.stdout || '').trim();
+          const expectedOutput = testCase.expectedOutput.trim();
+          
+          // Check if test case passed
+          const passed = actualOutput === expectedOutput;
+          
+          results.push({
+            passed,
+            actualOutput,
+            expectedOutput,
+            input: testCase.input
+          });
+          
+          // Add delay between test cases to avoid rate limiting (except for the last one)
+          if (i < currentChallenge.testCases.length - 1) {
+            await delay(1000); // 1 second delay
+          }
+        } catch (error) {
+          let errorMessage = 'Error occurred';
+          if (error instanceof Error) {
+            // Provide more specific error messages
+            if (error.message.includes('rate limit')) {
+              errorMessage = 'Rate limit exceeded. Please wait before submitting more requests.';
+            } else if (error.message.includes('submit code')) {
+              errorMessage = 'Failed to submit code for execution. Check your code syntax.';
+            } else if (error.message.includes('timeout')) {
+              errorMessage = 'Code execution timed out.';
+            } else if (error.message.includes('API key')) {
+              errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
+            } else {
+              errorMessage = error.message;
+            }
+          }
+          results.push({
+            passed: false,
+            actualOutput: errorMessage,
+            expectedOutput: testCase.expectedOutput,
+            input: testCase.input
+          });
+          
+          // If it's a rate limit error, stop executing more test cases
+          if (errorMessage.includes('rate limit') || errorMessage.includes('API key')) {
+            break;
+          }
+          
+          // Add delay between test cases to avoid rate limiting (except for the last one)
+          if (i < currentChallenge.testCases.length - 1) {
+            await delay(1000); // 1 second delay
+          }
+        }
+      }
+      
+      // Update test case results
+      setTestCaseResults(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: results
+      }));
+      
+      // Check if all test cases passed
+      const allPassed = results.every(result => result.passed);
+      setAllTestCasesPassed(allPassed);
+      
+      // Mark as successful execution if no compilation or runtime errors
+      setSuccessfulExecutions(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: true
+      }));
+      
+      // Show result in execution panel
+      setExecutionResult(prev => ({
+        ...prev,
+        [currentChallenge.questionId]: {
+          status: { id: allPassed ? 3 : 4, description: allPassed ? 'All Tests Passed' : 'Some Tests Failed' },
+          stdout: `Ran ${results.length} test cases. ${results.filter(r => r.passed).length} passed, ${results.filter(r => !r.passed).length} failed.`,
+          stderr: '',
+          compile_output: '',
+          message: '',
+          time: '',
+          memory: 0
+        }
+      }));
+      
+    } catch (error) {
+      // Provide a more user-friendly error message for rate limiting
+      let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+      if (errorMessage.includes('rate limit')) {
+        errorMessage = 'Rate limit exceeded. The system is temporarily busy. Please wait a moment and try again.';
+      } else if (errorMessage.includes('API key')) {
+        errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
+      } else if (errorMessage.includes('Failed to submit code')) {
+        errorMessage = 'Failed to connect to the code execution service. Please check your internet connection and try again.';
+      }
+      
+      setExecutionResult(prev => ({
+        ...prev,
+        [currentChallenge?.questionId || 'default']: {
+          status: { id: 0, description: 'Error' },
+          stdout: '',
+          stderr: errorMessage,
+          compile_output: '',
+          message: '',
+          time: '',
+          memory: 0
+        }
+      }));
+      
+      // Mark as unsuccessful execution due to error
+      if (currentChallenge?.questionId) {
+        setSuccessfulExecutions(prev => ({
+          ...prev,
+          [currentChallenge.questionId]: false
+        }));
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  }, [codingChallenges, currentCodingIndex, selectedLanguage]);
+  
+  // Fetch assessment data when component mounts or assessmentId changes
   useEffect(() => {
-    console.log('AssessmentTaking component mounted');
-    return () => {
-      console.log('AssessmentTaking component unmounting');
+    // Prevent multiple calls to the API
+    if (hasFetchedData.current || !assessmentId) {
+      if (!assessmentId) {
+        setError('Assessment ID is required');
+      }
+      return;
+    }
+    
+    const fetchAssessmentData = async () => {
+      try {
+        setLoading(true);
+        hasFetchedData.current = true; // Mark as fetched
+        
+        // Check if student has already attempted this assessment
+        try {
+          const resultsResponse = await ResultsService.getStudentResults();
+          const results = resultsResponse?.data || resultsResponse || [];
+          const hasAttempted = Array.isArray(results) && results.some((r: any) => r.assessmentId === assessmentId);
+          
+          if (hasAttempted) {
+            setError('You have already completed this assessment. You can only attempt it once.');
+            setLoading(false);
+            // Redirect to results after 3 seconds
+            setTimeout(() => {
+              const assessmentResult = results.find((r: any) => r.assessmentId === assessmentId);
+              if (assessmentResult?.SK) {
+                const encodedSK = encodeURIComponent(assessmentResult.SK);
+                navigate(`/student/results/${encodedSK}`);
+              } else {
+                navigate('/student/results');
+              }
+            }, 3000);
+            return;
+          }
+        } catch (resultsError) {
+          // If we can't check results, allow access (might be first time)
+          console.log('Could not check previous attempts:', resultsError);
+        }
+        
+        // Validate assessment ID before making API call
+        if (!assessmentId) {
+          setError('Assessment ID is required');
+          setLoading(false);
+          return;
+        }
+        
+        console.log(`Fetching assessment data for ID: ${assessmentId}`);
+        // Use the NEW endpoint to automatically fetch assessment with questions
+        const response = await StudentAssessmentService.getAssessmentWithQuestions(assessmentId);
+        
+        if (response.success) {
+          // Add additional validation to ensure we have the required data
+          if (!response.data) {
+            setError('Assessment not found. Please check if the assessment exists and you have access to it.');
+            setLoading(false);
+            return;
+          }
+          
+          // Extract assessment and questions from the new response format
+          const { assessment, questions } = response.data;
+          
+          // Check if assessment exists but has no questions
+          if (!questions || questions.length === 0) {
+            console.log(`Assessment ${assessmentId} exists but has no questions`);
+          }
+          
+          // Transform the data to match our existing interface
+          const transformedData = {
+            ...assessment,
+            questions: questions || [],
+            mcqQuestions: questions?.filter((q: any) => q.entityType === 'mcq') || [],
+            codingQuestions: questions?.filter((q: any) => q.entityType === 'coding') || []
+          };
+          
+          // Log coding questions with test cases for debugging
+          const codingQuestions = transformedData.codingQuestions || [];
+          if (codingQuestions.length > 0) {
+            console.log('Found coding questions with test cases:');
+            codingQuestions.forEach((question: any, index: number) => {
+              console.log(`Question ${index + 1} (${question.questionId}):`, question);
+              if (question.testCases && question.testCases.length > 0) {
+                console.log(`  Test cases for ${question.questionId}:`, question.testCases);
+              } else {
+                console.log(`  No test cases found for ${question.questionId}`);
+              }
+            });
+          }
+          
+          setAssessmentData(transformedData);
+          
+          // Set timer based on assessment configuration
+          if (assessment?.configuration?.duration) {
+            setTimeLeft(assessment.configuration.duration * 60); // Convert minutes to seconds
+          }
+        } else {
+          // Handle specific error cases
+          if (response.message && response.message.includes('not found')) {
+            setError(`Assessment not found: ${response.message}`);
+          } else {
+            setError(response.message || 'Failed to load assessment data');
+          }
+        }
+      } catch (err: any) {
+        console.error('Error fetching assessment data:', err);
+        // Provide more specific error messages
+        if (err.message && err.message.includes('not found')) {
+          setError(`Assessment not found: ${err.message}`);
+        } else if (err.message && err.message.includes('connect')) {
+          setError('Unable to connect to the server. Please check your internet connection and try again.');
+        } else if (err.message && err.message.includes('Authentication failed')) {
+          setError('Authentication failed. Please log in again.');
+        } else {
+          setError(err.message || 'Failed to load assessment data. Please try again later.');
+        }
+      } finally {
+        setLoading(false);
+      }
     };
-  }, []);
+    
+    fetchAssessmentData();
+  }, [assessmentId]); // Only depend on assessmentId
   
-  // MCQ Questions (20 predefined questions)
-  const mcqQuestions: MCQQuestion[] = [
-    {
-      id: 1,
-      question: "What is the output of the following code: console.log(typeof null);",
-      options: ["null", "object", "undefined", "boolean"],
-      correctAnswer: 1
-    },
-    {
-      id: 2,
-      question: "Which method is used to add an element to the end of an array in JavaScript?",
-      options: ["push()", "pop()", "shift()", "unshift()"],
-      correctAnswer: 0
-    },
-    {
-      id: 3,
-      question: "What does CSS stand for?",
-      options: ["Colorful Style Sheets", "Creative Style Sheets", "Cascading Style Sheets", "Computer Style Sheets"],
-      correctAnswer: 2
-    },
-    {
-      id: 4,
-      question: "Which HTML tag is used to define an internal style sheet?",
-      options: ["<script>", "<style>", "<css>", "<link>"],
-      correctAnswer: 1
-    },
-    {
-      id: 5,
-      question: "In Python, which keyword is used to define a function?",
-      options: ["function", "def", "func", "define"],
-      correctAnswer: 1
-    },
-    {
-      id: 6,
-      question: "What is the correct way to declare a variable in Java?",
-      options: ["var name = value;", "let name = value;", "String name = value;", "variable name = value;"],
-      correctAnswer: 2
-    },
-    {
-      id: 7,
-      question: "Which of the following is not a valid Python data type?",
-      options: ["List", "Dictionary", "Tuple", "Class"],
-      correctAnswer: 3
-    },
-    {
-      id: 8,
-      question: "What is the purpose of the 'this' keyword in JavaScript?",
-      options: [
-        "Refers to the parent object",
-        "Refers to the current object",
-        "Refers to the global object",
-        "Refers to the previous object"
-      ],
-      correctAnswer: 1
-    },
-    {
-      id: 9,
-      question: "Which CSS property is used to change the text color of an element?",
-      options: ["font-color", "text-color", "color", "foreground-color"],
-      correctAnswer: 2
-    },
-    {
-      id: 10,
-      question: "In HTML, which attribute is used to specify that an input field must be filled out?",
-      options: ["required", "validate", "mandatory", "important"],
-      correctAnswer: 0
-    },
-    {
-      id: 11,
-      question: "What is the correct syntax for referring to an external script called 'xxx.js'?",
-      options: [
-        "<script href='xxx.js'>",
-        "<script name='xxx.js'>",
-        "<script src='xxx.js'>",
-        "<script file='xxx.js'>"
-      ],
-      correctAnswer: 2
-    },
-    {
-      id: 12,
-      question: "Which of the following is a server-side JavaScript runtime?",
-      options: ["React", "Vue", "Node.js", "Angular"],
-      correctAnswer: 2
-    },
-    {
-      id: 13,
-      question: "What is the default value of the position property in CSS?",
-      options: ["relative", "absolute", "fixed", "static"],
-      correctAnswer: 3
-    },
-    {
-      id: 14,
-      question: "In Python, which function is used to get the length of a list?",
-      options: ["size()", "length()", "len()", "count()"],
-      correctAnswer: 2
-    },
-    {
-      id: 15,
-      question: "Which of the following is not a JavaScript framework?",
-      options: ["React", "Django", "Vue", "Angular"],
-      correctAnswer: 1
-    },
-    {
-      id: 16,
-      question: "What does the 'alt' attribute in HTML images provide?",
-      options: [
-        "Alternative text for the image",
-        "Alignment of the image",
-        "Animation for the image",
-        "Altitude of the image"
-      ],
-      correctAnswer: 0
-    },
-    {
-      id: 17,
-      question: "In CSS, which unit is relative to the font-size of the element?",
-      options: ["px", "em", "cm", "pt"],
-      correctAnswer: 1
-    },
-    {
-      id: 18,
-      question: "Which Python keyword is used to create a class?",
-      options: ["class", "def", "function", "create"],
-      correctAnswer: 0
-    },
-    {
-      id: 19,
-      question: "What is the correct way to write a comment in JavaScript?",
-      options: [
-        "<!-- This is a comment -->",
-        "// This is a comment",
-        "** This is a comment **",
-        "## This is a comment ##"
-      ],
-      correctAnswer: 1
-    },
-    {
-      id: 20,
-      question: "Which HTML element is used to specify a footer for a document or section?",
-      options: ["<bottom>", "<footer>", "<section>", "<foot>"],
-      correctAnswer: 1
+  // Set the active tab based on available questions
+  useEffect(() => {
+    if (assessmentData) {
+      // If we have coding challenges, default to coding tab
+      if (codingChallenges.length > 0) {
+        setActiveTab('coding');
+      } 
+      // Otherwise, if we have MCQ questions, default to mcq tab
+      else if (mcqQuestions.length > 0) {
+        setActiveTab('mcq');
+      }
     }
-  ];
-  
-  // Coding Challenges (5 challenges)
-  const codingChallenges: CodingChallenge[] = [
-    {
-      id: 1,
-      title: "Reverse a String",
-      description: "Write a function that takes a string as input and returns the reversed string.",
-      examples: [
-        { input: "hello", output: "olleh" },
-        { input: "world", output: "dlrow" }
-      ],
-      testCases: [
-        { input: "hello", expectedOutput: "olleh", description: "Basic test case" },
-        { input: "world", expectedOutput: "dlrow", description: "Another basic test" }
-      ]
-    },
-    {
-      id: 2,
-      title: "Find Maximum Number",
-      description: "Write a function that takes an array of numbers and returns the maximum number.",
-      examples: [
-        { input: "[1, 5, 3, 9, 2]", output: "9" },
-        { input: "[10, -5, 0, 15, 3]", output: "15" }
-      ],
-      testCases: [
-        { input: "[1, 5, 3, 9, 2]", expectedOutput: "9", description: "Basic test case" },
-        { input: "[10, -5, 0, 15, 3]", expectedOutput: "15", description: "With negative numbers" }
-      ]
-    },
-    {
-      id: 3,
-      title: "Check Palindrome",
-      description: "Write a function that checks if a given string is a palindrome (reads the same forwards and backwards).",
-      examples: [
-        { input: "racecar", output: "true" },
-        { input: "hello", output: "false" }
-      ],
-      testCases: [
-        { input: "racecar", expectedOutput: "true", description: "Basic palindrome" },
-        { input: "hello", expectedOutput: "false", description: "Not a palindrome" }
-      ]
-    },
-    {
-      id: 4,
-      title: "Array Sum",
-      description: "Write a function that takes an array of numbers and returns the sum of all elements.",
-      examples: [
-        { input: "[1, 2, 3, 4, 5]", output: "15" },
-        { input: "[10, -5, 3]", output: "8" }
-      ],
-      testCases: [
-        { input: "[1, 2, 3, 4, 5]", expectedOutput: "15", description: "Basic test case" },
-        { input: "[10, -5, 3]", expectedOutput: "8", description: "With negative numbers" }
-      ]
-    },
-    {
-      id: 5,
-      title: "FizzBuzz",
-      description: "Write a function that prints numbers from 1 to n. For multiples of 3, print 'Fizz' instead of the number. For multiples of 5, print 'Buzz'. For multiples of both 3 and 5, print 'FizzBuzz'.",
-      examples: [
-        { input: "5", output: "1\n2\nFizz\n4\nBuzz" },
-        { input: "15", output: "1\n2\nFizz\n4\nBuzz\nFizz\n7\n8\nFizz\nBuzz\n11\nFizz\n13\n14\nFizzBuzz" }
-      ],
-      testCases: [
-        { input: "5", expectedOutput: "1\n2\nFizz\n4\nBuzz", description: "Basic FizzBuzz" },
-        { input: "3", expectedOutput: "1\n2\nFizz", description: "Only Fizz" }
-      ]
-    }
-  ];
+  }, [assessmentData, codingChallenges.length, mcqQuestions.length]);
   
   // Languages supported by Judge0
   const languages = [
+    { id: 'html', name: 'HTML' },
     { id: 'javascript', name: 'JavaScript' },
     { id: 'python', name: 'Python' },
     { id: 'java', name: 'Java' },
@@ -294,194 +667,55 @@ const AssessmentTaking: React.FC = () => {
     { id: 'php', name: 'PHP' },
     { id: 'ruby', name: 'Ruby' },
     { id: 'go', name: 'Go' },
-    { id: 'rust', name: 'Rust' }
+    { id: 'rust', name: 'Rust' },
+    { id: 'react', name: 'React' },
+    { id: 'flutter', name: 'Flutter' }
   ];
   
   // Initialize code state for each challenge and language
   useEffect(() => {
-    console.log('=== Initializing code state ===');
-    const initialCode: {[key: number]: {[key: string]: string}} = {};
-    const initialTestCases: {[key: number]: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[]} = {};
-    
-    console.log('Coding challenges:', codingChallenges);
-    console.log('Languages:', languages);
-    
-    codingChallenges.forEach(challenge => {
-      initialCode[challenge.id] = {};
-      languages.forEach(lang => {
-        initialCode[challenge.id][lang.id] = '';
+    if (codingChallenges.length > 0) {
+      const initialCode: {[key: string]: {[key: string]: string}} = {};
+      const initialTestCases: {[key: string]: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[]} = {};
+      
+      codingChallenges.forEach(challenge => {
+        if (challenge.questionId) {
+          initialCode[challenge.questionId] = {};
+          languages.forEach(lang => {
+            // Use starter code if available, otherwise empty string
+            initialCode[challenge.questionId][lang.id] = challenge.starterCode || '';
+          });
+          
+          // Initialize empty test case results
+          initialTestCases[challenge.questionId] = [];
+        }
       });
       
-      // Initialize empty test case results
-      initialTestCases[challenge.id] = [];
-    });
-    
-    console.log('Initial code state:', initialCode);
-    console.log('Setting initial code state');
-    setCode(initialCode);
-    setTestCaseResults(initialTestCases);
-    console.log('Code state initialization complete');
-    
-    // Also ensure the first challenge has proper initialization
-    setTimeout(() => {
-      setCode(prev => {
-        if (!prev[0]) {
-          return {
-            ...prev,
-            0: {
-              [selectedLanguage]: ''
-            }
-          };
-        }
-        return prev;
-      });
-    }, 100);
-  }, []);
+      setCode(initialCode);
+      setTestCaseResults(initialTestCases);
+    }
+  }, [codingChallenges]); // Only depend on codingChallenges array
   
   // Ensure code state is properly initialized for current challenge and language
   useEffect(() => {
     // Check if code state exists for current challenge and language
     if (code && Object.keys(code).length > 0) {
-      if (!code[currentCodingIndex]) {
-        console.log('Initializing code for challenge:', currentCodingIndex);
+      if (!code[codingChallenges[currentCodingIndex]?.questionId]) {
         setCode(prev => ({
           ...prev,
-          [currentCodingIndex]: {}
+          [codingChallenges[currentCodingIndex]?.questionId]: {}
         }));
-      } else if (!code[currentCodingIndex][selectedLanguage]) {
-        console.log('Initializing code for language:', selectedLanguage);
+      } else if (!code[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage]) {
         setCode(prev => ({
           ...prev,
-          [currentCodingIndex]: {
-            ...prev[currentCodingIndex],
+          [codingChallenges[currentCodingIndex]?.questionId]: {
+            ...prev[codingChallenges[currentCodingIndex]?.questionId],
             [selectedLanguage]: ''
           }
         }));
       }
     }
-  }, [code, currentCodingIndex, selectedLanguage]);
-  
-  // Ensure initial code state is set for the first challenge and language
-  useEffect(() => {
-    if (code && Object.keys(code).length === 0) {
-      console.log('Setting initial code state for first challenge');
-      setCode({
-        0: {
-          [selectedLanguage]: ''
-        }
-      });
-    }
-  }, [code, selectedLanguage]);
-  
-  // Debug effect to check if code state is properly initialized
-  useEffect(() => {
-    // Check if the current code is undefined
-    if (code[currentCodingIndex]?.[selectedLanguage] === undefined) {
-      console.log('Warning: Code for current challenge and language is undefined');
-    } else {
-      console.log('Code for current challenge and language is defined:', code[currentCodingIndex]?.[selectedLanguage]);
-    }
-    console.log('Current isLoading state:', isLoading);
-    console.log('Current code state:', code);
-    console.log('Current coding index:', currentCodingIndex);
-    console.log('Selected language:', selectedLanguage);
-  }, [code, currentCodingIndex, selectedLanguage, isLoading]);
-  
-  // Debug effect to monitor isLoading state changes
-  useEffect(() => {
-    console.log('isLoading state changed to:', isLoading);
-  }, [isLoading]);
-  
-  // Debug effect to monitor code state changes
-  useEffect(() => {
-    console.log('Code state changed:', code);
-  }, [code]);
-  
-  // Debug effect to monitor all state changes
-  useEffect(() => {
-    console.log('=== State Update ===');
-    console.log('isLoading:', isLoading);
-    console.log('code:', code);
-    console.log('currentCodingIndex:', currentCodingIndex);
-    console.log('selectedLanguage:', selectedLanguage);
-    console.log('code for current challenge/language:', code?.[currentCodingIndex]?.[selectedLanguage]);
-    console.log('====================');
-  }, [isLoading, code, currentCodingIndex, selectedLanguage]);
-  
-  // Safety check to ensure isLoading doesn't get stuck
-  useEffect(() => {
-    if (isLoading) {
-      const timeout = setTimeout(() => {
-        console.log('Safety check: isLoading was true for too long, resetting to false');
-        setIsLoading(false);
-      }, 10000); // 10 second timeout
-      
-      return () => clearTimeout(timeout);
-    }
-  }, [isLoading]);
-  
-  // Scroll to bottom of code editor when code changes
-  useEffect(() => {
-    if (codeEditorRef.current && activeTab === 'coding') {
-      // Scroll to bottom of the editor
-      const editor = codeEditorRef.current;
-      editor.scrollTop = editor.scrollHeight;
-    }
-  }, [code, currentCodingIndex, selectedLanguage, activeTab]);
-  
-  // Additional scroll handling when component mounts
-  useEffect(() => {
-    if (codeEditorRef.current && activeTab === 'coding') {
-      // Ensure proper scrolling after component mounts
-      setTimeout(() => {
-        if (codeEditorRef.current) {
-          const editor = codeEditorRef.current;
-          editor.scrollTop = editor.scrollHeight;
-        }
-      }, 100);
-    }
-  }, [activeTab]);
-  
-  // Dynamically adjust editor height based on content
-  useEffect(() => {
-    const adjustEditorHeight = () => {
-      if (codeEditorRef.current && code && currentCodingIndex >= 0) {
-        const currentCode = code[currentCodingIndex]?.[selectedLanguage] || '';
-        const editor = codeEditorRef.current;
-        const lines = currentCode.split('\n').length;
-        const lineHeight = 22; // Approximate line height in pixels
-        const padding = 40; // Top and bottom padding
-        const minHeight = 200; // Minimum height
-        const maxHeight = 800; // Maximum height
-        
-        // Calculate new height based on content
-        let newHeight = lines * lineHeight + padding;
-        
-        // Ensure height is within bounds
-        newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
-        
-        // Apply the height
-        editor.style.height = `${newHeight}px`;
-      }
-    };
-    
-    // Adjust height when code, index, or language changes
-    adjustEditorHeight();
-    
-    // Also adjust height when window is resized
-    window.addEventListener('resize', adjustEditorHeight);
-    
-    // Cleanup event listener
-    return () => {
-      window.removeEventListener('resize', adjustEditorHeight);
-    };
-  }, [code, currentCodingIndex, selectedLanguage]);
-  
-  // Function to manually reset loading state (for emergency use)
-  const resetLoadingState = () => {
-    console.log('Manually resetting loading state');
-    setIsLoading(false);
-  };
+  }, [code, currentCodingIndex, selectedLanguage, codingChallenges]);
   
   // Timer effect
   useEffect(() => {
@@ -530,18 +764,42 @@ const AssessmentTaking: React.FC = () => {
   
   // Handle MCQ answer selection
   const handleMCQAnswerSelect = (optionIndex: number) => {
+    console.log('MCQ Answer Selected:', {
+      optionIndex,
+      currentQuestionId: mcqQuestions[currentMCQIndex]?.questionId,
+      currentQuestion: mcqQuestions[currentMCQIndex]
+    });
+    
     setMcqAnswers(prev => ({
       ...prev,
-      [currentMCQIndex]: optionIndex
+      [mcqQuestions[currentMCQIndex]?.questionId]: optionIndex
     }));
   };
   
-  // Handle navigation between MCQ questions
-  const handleMCQNavigation = (direction: 'prev' | 'next') => {
-    if (direction === 'prev' && currentMCQIndex > 0) {
-      setCurrentMCQIndex(currentMCQIndex - 1);
-    } else if (direction === 'next' && currentMCQIndex < mcqQuestions.length - 1) {
-      setCurrentMCQIndex(currentMCQIndex + 1);
+  // Handle MCQ navigation (Save and Next button)
+  const handleMCQNavigation = (direction: 'next' | 'prev') => {
+    if (direction === 'next') {
+      // Save current answer before moving to next question
+      if (currentMCQIndex < mcqQuestions.length - 1) {
+        // Move to next MCQ question
+        setCurrentMCQIndex(prev => prev + 1);
+      } else {
+        // Reached the end of MCQ questions
+        // Check if there are coding questions
+        if (codingChallenges.length > 0) {
+          // Switch to coding tab
+          setActiveTab('coding');
+          setCurrentCodingIndex(0);
+        } else {
+          // No coding questions, submit the assessment
+          handleSubmit();
+        }
+      }
+    } else if (direction === 'prev') {
+      // Move to previous question
+      if (currentMCQIndex > 0) {
+        setCurrentMCQIndex(prev => prev - 1);
+      }
     }
   };
   
@@ -555,13 +813,9 @@ const AssessmentTaking: React.FC = () => {
   };
   
   // Handle code change with auto-run debounce
-  const handleCodeChange = (newCode: string) => {
-    console.log('handleCodeChange called with:', newCode);
-    console.log('Current state - index:', currentCodingIndex, 'language:', selectedLanguage);
-    
+  const handleCodeChange = useCallback((newCode: string) => {
     // Check if the indices are valid
     if (currentCodingIndex < 0 || currentCodingIndex >= codingChallenges.length) {
-      console.log('Invalid coding index:', currentCodingIndex);
       return;
     }
     
@@ -570,71 +824,26 @@ const AssessmentTaking: React.FC = () => {
       const newState = { ...prev };
       
       // Ensure challenge exists
-      if (!newState[currentCodingIndex]) {
-        newState[currentCodingIndex] = {};
+      if (!newState[codingChallenges[currentCodingIndex]?.questionId]) {
+        newState[codingChallenges[currentCodingIndex]?.questionId] = {};
       }
       
       // Ensure language exists for this challenge
-      if (!newState[currentCodingIndex][selectedLanguage]) {
-        newState[currentCodingIndex][selectedLanguage] = '';
+      if (!newState[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage]) {
+        newState[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage] = '';
       }
       
       // Update the code
-      newState[currentCodingIndex][selectedLanguage] = newCode;
+      newState[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage] = newCode;
       
-      console.log('Updated code state:', newState);
       return newState;
     });
     
-    // Dynamically adjust editor height based on content
-    setTimeout(() => {
-      if (codeEditorRef.current) {
-        const editor = codeEditorRef.current;
-        const lines = newCode.split('\n').length;
-        const lineHeight = 22; // Approximate line height in pixels
-        const padding = 40; // Top and bottom padding
-        const minHeight = 200; // Minimum height
-        const maxHeight = 800; // Maximum height
-        
-        // Calculate new height based on content
-        let newHeight = lines * lineHeight + padding;
-        
-        // Ensure height is within bounds
-        newHeight = Math.max(minHeight, Math.min(newHeight, maxHeight));
-        
-        // Apply the height
-        editor.style.height = `${newHeight}px`;
-      }
-    }, 0);
-    
-    // Scroll to bottom if content is long
-    setTimeout(() => {
-      if (codeEditorRef.current) {
-        codeEditorRef.current.scrollTop = codeEditorRef.current.scrollHeight;
-      }
-    }, 10);
-    
-    // Additional scroll handling for long content
-    setTimeout(() => {
-      if (codeEditorRef.current) {
-        const editor = codeEditorRef.current;
-        const lineHeight = parseInt(window.getComputedStyle(editor).lineHeight);
-        const lines = newCode.split('\n').length;
-        const contentHeight = lines * lineHeight;
-        const viewportHeight = editor.clientHeight;
-        
-        // If content is taller than viewport, scroll to bottom
-        if (contentHeight > viewportHeight) {
-          editor.scrollTop = editor.scrollHeight;
-        }
-      }
-    }, 50);
-    
     // If there was an error previously and user is typing, clear the error
-    if (executionResult[currentCodingIndex]?.stderr) {
+    if (executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr) {
       setExecutionResult(prev => {
         const newResult = { ...prev };
-        delete newResult[currentCodingIndex];
+        delete newResult[codingChallenges[currentCodingIndex]?.questionId];
         return newResult;
       });
     }
@@ -648,302 +857,370 @@ const AssessmentTaking: React.FC = () => {
       
       // Set new timeout
       autoRunTimeoutRef.current = setTimeout(() => {
-        executeCode('example');
+        runCode('example');
       }, 800);
     }
-  };
+  }, [currentCodingIndex, codingChallenges, selectedLanguage, executionResult, isAutoRunEnabled, runCode]);
   
   // Handle language selection and dismiss alert
   const handleLanguageSelect = (language: string) => {
-    console.log('Language selected:', language);
     setSelectedLanguage(language);
     setShowLanguageAlert(false);
   };
 
-  // Reset alert when switching to coding tab
-  useEffect(() => {
-    if (activeTab === 'coding') {
-      setShowLanguageAlert(true);
-    }
-  }, [activeTab]);
-  
-  // Execute code with Judge0 API
-  const executeCode = async (inputType: 'example' | 'custom' | 'test' = 'example') => {
-    console.log('executeCode called with inputType:', inputType);
+  // Calculate MCQ score
+  const calculateMCQScore = () => {
+    let score = 0;
+    let maxScore = 0;
+    const answers: any = {};
     
-    // Always reset isLoading to false at the beginning to ensure clean state
-    setIsLoading(false);
-    
-    // Force a small delay to ensure state update
-    await new Promise(resolve => setTimeout(resolve, 10));
-    
-    console.log('Setting isLoading to true');
-    setIsLoading(true);
-    
-    try {
-      let currentCode = code[currentCodingIndex]?.[selectedLanguage] || '';
-      console.log('Current code to execute:', currentCode);
+    mcqQuestions.forEach((question, index) => {
+      maxScore += question.points || 1;
+      answers[question.questionId] = {
+        selectedOption: mcqAnswers[question.questionId],
+        correctOption: question.correctAnswer,
+        points: question.points || 1
+      };
       
-      // Check if code is empty
-      if (!currentCode.trim()) {
-        console.log('Code is empty, showing error');
-        setExecutionResult(prev => ({
-          ...prev,
-          [currentCodingIndex]: {
-            status: { id: 0, description: 'Error' },
-            stdout: '',
-            stderr: 'Please enter some code before running.',
-            compile_output: '',
-            message: '',
-            time: '',
-            memory: 0
+      // Check if answer is correct by comparing selected option with correct answer
+      if (mcqAnswers[question.questionId] !== undefined) {
+        // Get the option ID (A, B, C, D) for the selected index
+        const selectedOptionId = String.fromCharCode(65 + mcqAnswers[question.questionId]);
+        
+        // Check if the selected option matches any of the correct answers
+        let isCorrect = false;
+        if (Array.isArray(question.correctAnswer)) {
+          isCorrect = question.correctAnswer.includes(selectedOptionId);
+        } else if (typeof question.correctAnswer === 'string') {
+          isCorrect = question.correctAnswer === selectedOptionId;
+        }
+        
+        if (isCorrect) {
+          score += question.points || 1;
+        }
+        
+        // Store correctness for UI feedback
+        answers[question.questionId].isCorrect = isCorrect;
+      }
+    });
+    
+    return { score, maxScore, answers };
+  };
+
+  // Handle submit
+  const handleSubmit = async () => {
+    // Prevent double submission
+    if (isSubmitting || submitted) {
+      return;
+    }
+
+    try {
+      setIsSubmitting(true);
+      
+      // Get user info from context or token
+      let studentEmail = user?.email || '';
+      let studentName = user?.name || '';
+      
+      // If not in context, try to get from token
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            const userProfile = await AuthService.getUserProfile(token);
+            studentEmail = userProfile.email || '';
+            studentName = userProfile.name || '';
           }
-        }));
-        console.log('Setting isLoading to false (empty code)');
-        setIsLoading(false);
+        } catch (err) {
+          console.error('Error getting user from token:', err);
+        }
+      }
+      
+      // Final fallback - decode JWT token to get email
+      if (!studentEmail) {
+        try {
+          const token = AuthService.getAccessToken();
+          if (token) {
+            // Decode JWT token (simple base64 decode, no verification needed for email extraction)
+            const payload = JSON.parse(atob(token.split('.')[1]));
+            studentEmail = payload.email || payload['cognito:username'] || payload.username || payload.sub || '';
+            studentName = payload.name || payload['cognito:name'] || `${payload.given_name || ''} ${payload.family_name || ''}`.trim() || studentEmail;
+          }
+        } catch (err) {
+          console.error('Error decoding token:', err);
+        }
+      }
+      
+      if (!studentEmail) {
+        alert('User email not found. Please log in again.');
+        setIsSubmitting(false);
         return;
       }
       
-      // Preprocess code for specific languages
-      if (selectedLanguage === 'java') {
-        // Ensure Java class is named 'Main' as required by Judge0
-        const originalCode = currentCode;
-        currentCode = currentCode.replace(/public\s+class\s+\w+/g, 'public class Main');
-        if (originalCode !== currentCode) {
-          console.log('Preprocessed Java code: replaced class name');
-        }
-      } else if (selectedLanguage === 'csharp') {
-        // Ensure C# class is named 'Main' as required by Judge0
-        const originalCode = currentCode;
-        currentCode = currentCode.replace(/public\s+class\s+\w+/g, 'public class Main');
-        if (originalCode !== currentCode) {
-          console.log('Preprocessed C# code: replaced class name');
-        }
-      } else if (selectedLanguage === 'python') {
-        // For Python, ensure proper indentation and handle common issues
-        // No specific preprocessing needed for basic cases
-      } else if (selectedLanguage === 'cpp') {
-        // For C++, ensure proper includes and main function
-        // No specific preprocessing needed for basic cases
+      // If name is still empty, use email
+      if (!studentName) {
+        studentName = studentEmail;
       }
-      
-      // Handle different execution types
-      if (inputType === 'test') {
-        // Run all test cases
-        console.log('Running test cases');
-        await runTestCases(currentCode);
-      } else {
-        // Get input based on input type
-        let input = '';
-        if (inputType === 'example' && codingChallenges[currentCodingIndex]?.examples[0]) {
-          input = codingChallenges[currentCodingIndex].examples[0].input;
-        } else if (inputType === 'custom') {
-          input = customInput;
-        }
-        console.log('Executing code with input:', input);
+
+      // Calculate MCQ answers in exact format
+      const mcqAnswersArray: any[] = [];
+      let mcqScore = 0;
+      let mcqMaxScore = 0;
+      let mcqCorrect = 0;
+      let mcqIncorrect = 0;
+      let mcqUnattempted = 0;
+
+      mcqQuestions.forEach((question) => {
+        mcqMaxScore += question.points || 1;
+        const selectedIndex = mcqAnswers[question.questionId];
         
-        // Execute code using Judge0 service
-        const result = await judge0Service.executeCode(currentCode, selectedLanguage, input);
-        console.log('Code execution result:', result);
+        // Get selected option IDs as array of strings
+        let selected: string[] = [];
+        if (selectedIndex !== undefined) {
+          const optionId = String.fromCharCode(65 + selectedIndex); // A, B, C, D
+          selected = [optionId];
+        }
         
-        setExecutionResult(prev => ({
-          ...prev,
-          [currentCodingIndex]: result
-        }));
-      }
-    } catch (error) {
-      console.error('Error executing code:', error);
-      // Provide a more user-friendly error message for rate limiting
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      if (errorMessage.includes('rate limit')) {
-        errorMessage = 'Rate limit exceeded. The system is temporarily busy. Please wait a moment and try again.';
-      } else if (errorMessage.includes('API key')) {
-        errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
-      } else if (errorMessage.includes('Failed to submit code')) {
-        errorMessage = 'Failed to connect to the code execution service. Please check your internet connection and try again.';
-      }
-      
-      setExecutionResult(prev => ({
-        ...prev,
-        [currentCodingIndex]: {
-          status: { id: 0, description: 'Error' },
-          stdout: '',
-          stderr: errorMessage,
-          compile_output: '',
-          message: '',
-          time: '',
-          memory: 0
+        // Check if correct
+        let isCorrect = false;
+        if (selectedIndex !== undefined) {
+          const selectedOptionId = String.fromCharCode(65 + selectedIndex);
+          if (Array.isArray(question.correctAnswer)) {
+            isCorrect = question.correctAnswer.includes(selectedOptionId);
+          } else if (typeof question.correctAnswer === 'string') {
+            isCorrect = question.correctAnswer === selectedOptionId;
+          }
+          
+          if (isCorrect) {
+            mcqScore += question.points || 1;
+            mcqCorrect++;
+          } else {
+            mcqIncorrect++;
+          }
+        } else {
+          mcqUnattempted++;
         }
-      }));
-    } finally {
-      // Ensure isLoading is always set to false when execution is done
-      console.log('Setting isLoading to false in finally block');
-      setIsLoading(false);
-      
-      // Add an extra safety check to ensure the state is properly updated
-      setTimeout(() => {
-        console.log('Double-checking isLoading state:', isLoading);
-        if (isLoading) {
-          console.log('Forcing isLoading to false as safety measure');
-          setIsLoading(false);
-        }
-      }, 100);
-    }
-  };
-  
-  // Utility function for delay
-  const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
-  
-  // Run all test cases for current challenge
-  const runTestCases = async (codeToTest: string) => {
-    console.log('Running test cases, setting isLoading to true');
-    try {
-      const currentChallenge = codingChallenges[currentCodingIndex];
-      if (!currentChallenge) return;
-      
-      const results: {passed: boolean, actualOutput: string, expectedOutput: string, input: string}[] = [];
-      
-      // Run each test case with delay to avoid rate limiting
-      for (let i = 0; i < currentChallenge.testCases.length; i++) {
-        const testCase = currentChallenge.testCases[i];
         
-        try {
-          // Preprocess input for array inputs in specific languages
-          let processedInput = testCase.input;
-          
-          // For Python and JavaScript, convert array string to actual array if needed
-          if ((selectedLanguage === 'python' || selectedLanguage === 'javascript') && 
-              testCase.input.startsWith('[') && testCase.input.endsWith(']')) {
-            // Input is already in correct format for these languages
+        mcqAnswersArray.push({
+          questionId: question.questionId,
+          selected: selected,
+          isCorrect: isCorrect
+        });
+      });
+
+      // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
+      const codingAnswersArray: any[] = [];
+      let codingScore = 0;
+      let codingMaxScore = 0;
+      let codingCorrect = 0;
+      let codingIncorrect = 0;
+      let codingUnattempted = 0;
+
+      codingChallenges.forEach((challenge) => {
+        codingMaxScore += challenge.points || 1;
+        const challengeCode = code[challenge.questionId]?.[selectedLanguage] || '';
+        const hasCode = challengeCode.trim().length > 0;
+        const isSuccessful = successfulExecutions[challenge.questionId] || false;
+        
+        if (hasCode) {
+          if (isSuccessful) {
+            codingScore += challenge.points || 1;
+            codingCorrect++;
+          } else {
+            codingIncorrect++;
           }
-          
-          console.log('Running test case with:', { codeToTest, selectedLanguage, processedInput });
-          const result = await judge0Service.executeCode(codeToTest, selectedLanguage, processedInput);
-          console.log('Test case result:', result);
-          
-          // Normalize output for comparison (remove trailing newlines and whitespace)
-          const actualOutput = (result.stdout || '').trim();
-          const expectedOutput = testCase.expectedOutput.trim();
-          
-          // Check if test case passed
-          const passed = actualOutput === expectedOutput;
-          
-          results.push({
-            passed,
-            actualOutput,
-            expectedOutput,
-            input: testCase.input
-          });
-          
-          // Add delay between test cases to avoid rate limiting (except for the last one)
-          if (i < currentChallenge.testCases.length - 1) {
-            await delay(1000); // 1 second delay
-          }
-        } catch (error) {
-          console.error('Error running test case:', error);
-          let errorMessage = 'Error occurred';
-          if (error instanceof Error) {
-            // Provide more specific error messages
-            if (error.message.includes('rate limit')) {
-              errorMessage = 'Rate limit exceeded. Please wait before submitting more requests.';
-            } else if (error.message.includes('submit code')) {
-              errorMessage = 'Failed to submit code for execution. Check your code syntax.';
-            } else if (error.message.includes('timeout')) {
-              errorMessage = 'Code execution timed out.';
-            } else if (error.message.includes('API key')) {
-              errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
-            } else {
-              errorMessage = error.message;
-            }
-          }
-          console.log('Test case error details:', { testCase, errorMessage });
-          results.push({
-            passed: false,
-            actualOutput: errorMessage,
-            expectedOutput: testCase.expectedOutput,
-            input: testCase.input
-          });
-          
-          // If it's a rate limit error, stop executing more test cases
-          if (errorMessage.includes('rate limit') || errorMessage.includes('API key')) {
-            break;
-          }
-          
-          // Add delay between test cases to avoid rate limiting (except for the last one)
-          if (i < currentChallenge.testCases.length - 1) {
-            await delay(1000); // 1 second delay
-          }
+        } else {
+          codingUnattempted++;
         }
+        
+        codingAnswersArray.push({
+          questionId: challenge.questionId,
+          selected: hasCode ? [challengeCode] : [],
+          isCorrect: isSuccessful
+        });
+      });
+
+      // Combine all answers
+      const allAnswers = [...mcqAnswersArray, ...codingAnswersArray];
+      
+      // Calculate totals
+      const totalScore = mcqScore + codingScore;
+      const totalMaxScore = mcqMaxScore + codingMaxScore;
+      const totalQuestions = mcqQuestions.length + codingChallenges.length;
+      const numCorrect = mcqCorrect + codingCorrect;
+      const numIncorrect = mcqIncorrect + codingIncorrect;
+      const numUnattempted = mcqUnattempted + codingUnattempted;
+      const accuracy = totalQuestions > 0 ? Math.round((numCorrect / totalQuestions) * 100) : 0;
+      const percentage = totalMaxScore > 0 ? Math.round((totalScore / totalMaxScore) * 100) : 0;
+      const timeSpentSeconds = 3600 - timeLeft;
+
+      // Prepare result data in EXACT schema
+      // Get department from assessment first (the department chosen when creating the assessment)
+      // Then fallback to user's department, then departmentCode, then 'Unknown'
+      const department = assessmentData?.department || 
+                        assessmentData?.departmentCode || 
+                        user?.department || 
+                        'Unknown';
+      
+      const resultData = {
+        assessmentId: assessmentData?.assessmentId || '',
+        email: studentEmail,
+        Name: studentName,
+        department: department,
+        answers: allAnswers,
+        score: totalScore,
+        maxScore: totalMaxScore,
+        percentage: percentage,
+        accuracy: accuracy,
+        numCorrect: numCorrect,
+        numIncorrect: numIncorrect,
+        numUnattempted: numUnattempted,
+        entity_marks: {
+          MCQ: mcqScore,
+          CODING: codingScore
+        },
+        timeSpentSeconds: timeSpentSeconds,
+        submittedAt: new Date().toISOString()
+      };
+
+      // Validate required fields
+      if (!resultData.assessmentId) {
+        alert('Assessment ID is missing. Cannot submit.');
+        setIsSubmitting(false);
+        return;
       }
+
+      // Store MCQ results for UI feedback
+      setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
+        acc[ans.questionId] = ans;
+        return acc;
+      }, {} as any));
+      setSubmitted(true);
       
-      // Update test case results
-      setTestCaseResults(prev => ({
-        ...prev,
-        [currentCodingIndex]: results
-      }));
+      console.log('Submitting assessment result...', resultData);
       
-      // Check if all test cases passed
-      const allPassed = results.every(result => result.passed);
-      setAllTestCasesPassed(allPassed);
+      // Save result to database
+      const saveResponse = await ResultsService.saveAssessmentResult(resultData);
+      console.log('Save response:', saveResponse);
       
-      // Show result in execution panel
-      setExecutionResult(prev => ({
-        ...prev,
-        [currentCodingIndex]: {
-          status: { id: allPassed ? 3 : 4, description: allPassed ? 'All Tests Passed' : 'Some Tests Failed' },
-          stdout: `Ran ${results.length} test cases. ${results.filter(r => r.passed).length} passed, ${results.filter(r => !r.passed).length} failed.`,
-          stderr: '',
-          compile_output: '',
-          message: '',
-          time: '',
-          memory: 0
+      // Get the SK (attemptId) from the response
+      const attemptId = saveResponse?.data?.SK || saveResponse?.SK;
+      console.log('Attempt ID (SK):', attemptId);
+      
+      console.log('Assessment result saved successfully, navigating to success page...');
+      
+      // Navigate to submission success page with attemptId
+      navigate('/student/assessment-submitted', {
+        state: {
+          assessmentId: resultData.assessmentId,
+          attemptId: attemptId // Pass SK so we can navigate directly to detail page
         }
-      }));
+      });
       
-    } catch (error) {
-      console.error('Error running test cases:', error);
-      // Provide a more user-friendly error message for rate limiting
-      let errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
-      if (errorMessage.includes('rate limit')) {
-        errorMessage = 'Rate limit exceeded. The system is temporarily busy. Please wait a moment and try again.';
-      } else if (errorMessage.includes('API key')) {
-        errorMessage = 'Judge0 API is not configured properly. Please contact the system administrator.';
-      } else if (errorMessage.includes('Failed to submit code')) {
-        errorMessage = 'Failed to connect to the code execution service. Please check your internet connection and try again.';
-      }
-      
-      setExecutionResult(prev => ({
-        ...prev,
-        [currentCodingIndex]: {
-          status: { id: 0, description: 'Error' },
-          stdout: '',
-          stderr: errorMessage,
-          compile_output: '',
-          message: '',
-          time: '',
-          memory: 0
-        }
-      }));
-    } finally {
-      // Ensure isLoading is always set to false when test cases are done
-      console.log('Setting isLoading to false in runTestCases finally block');
-      setIsLoading(false);
-    }
-  };
-   
-  const handleSubmit = () => {
-    if (allTestCasesPassed) {
-     
-      alert('Assessment submitted successfully! All test cases passed.');
       setIsAssessmentCompleted(true);
       // Notify parent component that assessment is completed
       if (window.parent) {
         window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');
       }
-    } else {
-      alert('Please ensure all test cases pass before submitting.');
+    } catch (error: any) {
+      console.error('Error saving assessment result:', error);
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response?.data,
+        status: error.response?.status,
+        url: error.config?.url
+      });
+      
+      setIsSubmitting(false);
+      setSubmitted(false);
+      
+      // Provide more specific error messages
+      let errorMessage = 'Assessment completed but there was an error saving your results.';
+      
+      if (error.response) {
+        // Server responded with error
+        const serverMessage = error.response.data?.message || error.response.data?.error || 'Unknown server error';
+        errorMessage = `Error: ${serverMessage}`;
+        
+        if (error.response.status === 401) {
+          errorMessage = 'Your session has expired. Please log in again to save your results.';
+        } else if (error.response.status === 404) {
+          errorMessage = 'API endpoint not found. Please check if backend server is running.';
+        } else if (error.response.status === 500) {
+          errorMessage = `Server error: ${serverMessage}. Please check backend logs.`;
+        }
+      } else if (error.request) {
+        // Request was made but no response received
+        errorMessage = 'Cannot connect to server. Please check:\n1. Backend server is running on port 3000\n2. Your internet connection\n3. Check browser console for details';
+      } else if (error.message?.includes('Network Error') || error.code === 'ERR_NETWORK') {
+        errorMessage = 'Network error. Please check:\n1. Backend server is running\n2. CORS is configured correctly\n3. Check browser console for details';
+      } else {
+        errorMessage = `Error: ${error.message || 'Unknown error occurred'}`;
+      }
+      
+      console.error('Final error message:', errorMessage);
+      alert(errorMessage);
     }
   };
+  
+  // Render loading state
+  if (loading) {
+    return (
+      <div className="assessment-taking-container">
+        <div className="loading-container">
+          <h2>Loading Assessment...</h2>
+          <p>Please wait while we prepare your assessment.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Render error state
+  if (error) {
+    return (
+      <div className="assessment-taking-container">
+        <div className="error-container">
+          <h2>Error Loading Assessment</h2>
+          <p>{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="retry-button"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+  
+  // Render if no assessment data
+  if (!assessmentData) {
+    return (
+      <div className="assessment-taking-container">
+        <div className="error-container">
+          <h2>Assessment Not Found</h2>
+          <p>The requested assessment could not be found.</p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Render if no questions
+  if (assessmentData && (!assessmentData.questions || assessmentData.questions.length === 0)) {
+    return (
+      <div className="assessment-taking-container">
+        <div className="error-container">
+          <h2>No Questions Available</h2>
+          <p>This assessment does not contain any questions yet.</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="retry-button"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
   
   return (
     <div className={`assessment-taking ${isFullscreen ? 'fullscreen' : ''}`}>
@@ -958,14 +1235,16 @@ const AssessmentTaking: React.FC = () => {
         <div className="header-controls">
           {/* Navigation buttons as tabs near timer */}
           <button 
-            className={`section-btn ${activeTab === 'mcq' ? 'active' : ''}`}
-            onClick={() => setActiveTab('mcq')}
+            className={`section-btn ${activeTab === 'mcq' ? 'active' : ''} ${mcqQuestions.length === 0 ? 'disabled' : ''}`}
+            onClick={() => mcqQuestions.length > 0 && setActiveTab('mcq')}
+            disabled={mcqQuestions.length === 0}
           >
             MCQ
           </button>
           <button 
-            className={`section-btn ${activeTab === 'coding' ? 'active' : ''}`}
-            onClick={() => setActiveTab('coding')}
+            className={`section-btn ${activeTab === 'coding' ? 'active' : ''} ${codingChallenges.length === 0 ? 'disabled' : ''}`}
+            onClick={() => codingChallenges.length > 0 && setActiveTab('coding')}
+            disabled={codingChallenges.length === 0}
           >
             Coding
           </button>
@@ -1002,18 +1281,50 @@ const AssessmentTaking: React.FC = () => {
                 </div>
                 
                 <div className="options-container small">
-                  {mcqQuestions[currentMCQIndex]?.options.map((option, index) => (
-                    <div
-                      key={index}
-                      className="option-item"
-                      onClick={() => handleMCQAnswerSelect(index)}
-                    >
-                      <div className={`radio-button ${mcqAnswers[currentMCQIndex] === index ? 'selected' : ''}`}>
-                        {mcqAnswers[currentMCQIndex] === index && <div className="radio-button-inner"></div>}
+                  {mcqQuestions[currentMCQIndex]?.options.map((option, index) => {
+                    // Check if this option should show feedback
+                    const questionId = mcqQuestions[currentMCQIndex]?.questionId;
+                    const showFeedback = submitted && mcqResults && mcqResults[questionId];
+                    const isSelected = mcqAnswers[questionId] === index;
+                    const isCorrectOption = Array.isArray(mcqQuestions[currentMCQIndex]?.correctAnswer) 
+                      ? mcqQuestions[currentMCQIndex]?.correctAnswer.includes(String.fromCharCode(65 + index))
+                      : mcqQuestions[currentMCQIndex]?.correctAnswer === String.fromCharCode(65 + index);
+                    
+                    let optionClass = "option-item";
+                    if (showFeedback) {
+                      if (isSelected && mcqResults[questionId].isCorrect) {
+                        optionClass += " correct-answer";
+                      } else if (isSelected && !mcqResults[questionId].isCorrect) {
+                        optionClass += " incorrect-answer";
+                      } else if (isCorrectOption) {
+                        optionClass += " correct-answer";
+                      }
+                    }
+                    
+                    return (
+                      <div
+                        key={index}
+                        className={optionClass}
+                        onClick={() => {
+                          // Only allow selection if not submitted
+                          if (!submitted) {
+                            handleMCQAnswerSelect(index);
+                          }
+                        }}
+                      >
+                        <div className={`radio-button ${mcqAnswers[questionId] === index ? 'selected' : ''}`}>
+                          {mcqAnswers[questionId] === index && <div className="radio-button-inner"></div>}
+                        </div>
+                        <span className="option-text">{option.text}</span>
+                        {showFeedback && isSelected && mcqResults[questionId].isCorrect && (
+                          <span className="feedback-icon correct">✓</span>
+                        )}
+                        {showFeedback && isSelected && !mcqResults[questionId].isCorrect && (
+                          <span className="feedback-icon incorrect">✗</span>
+                        )}
                       </div>
-                      <span className="option-text">{option}</span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>
@@ -1030,26 +1341,36 @@ const AssessmentTaking: React.FC = () => {
             {/* Save and Next button in the middle */}
             <button 
               className="nav-btn next save-next"
-              onClick={() => handleMCQNavigation('next')}
-              disabled={currentMCQIndex === mcqQuestions.length - 1}
+              onClick={() => {
+                // If on last MCQ question and no coding questions, submit
+                if (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0) {
+                  handleSubmit();
+                } else {
+                  handleMCQNavigation('next');
+                }
+              }}
+              disabled={isSubmitting || submitted}
             >
-              Save and Next
+              {isSubmitting ? 'Submitting...' : (currentMCQIndex === mcqQuestions.length - 1 && codingChallenges.length === 0 ? 'Submit' : 'Save and Next')}
             </button>
             
-            {/* Submit button on right side corner */}
-            <button 
-              className="submit-btn small right-corner"
-              onClick={handleSubmit}
-            >
-              Submit
-            </button>
+            {/* Submit button on right side corner - only show if no coding questions */}
+            {codingChallenges.length === 0 && (
+              <button 
+                className="submit-btn small right-corner"
+                onClick={handleSubmit}
+                disabled={isSubmitting || submitted}
+              >
+                {isSubmitting ? 'Submitting...' : 'Submit'}
+              </button>
+            )}
             
             {/* 6x6 grid on the right side corner */}
             <div className="question-grid-container">
               {mcqQuestions.map((_, index) => (
                 <div 
                   key={index}
-                  className={`question-number-circle ${mcqAnswers[index] !== undefined ? 'answered' : ''} ${index === currentMCQIndex ? 'current' : ''}`}
+                  className={`question-number-circle ${mcqAnswers[mcqQuestions[index]?.questionId] !== undefined ? 'answered' : ''} ${index === currentMCQIndex ? 'current' : ''}`}
                   onClick={() => setCurrentMCQIndex(index)}
                 >
                   {index + 1}
@@ -1060,7 +1381,7 @@ const AssessmentTaking: React.FC = () => {
         ) : (
           <div className="coding-section">
             <div className="coding-header">
-              <h2 className="challenge-title">{codingChallenges[currentCodingIndex]?.title}</h2>
+              <h2 className="challenge-title">{codingChallenges[currentCodingIndex]?.question}</h2>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
                 <select 
                   className="language-selector"
@@ -1073,29 +1394,10 @@ const AssessmentTaking: React.FC = () => {
                 </select>
                 <button 
                   className="control-btn run-btn"
-                  onClick={() => {
-                    console.log('Run Code button clicked');
-                    console.log('Current state - isLoading:', isLoading);
-                    console.log('Current code:', code[currentCodingIndex]?.[selectedLanguage]);
-                    executeCode('custom');
-                  }}
-                  disabled={isLoading || !code || !code[currentCodingIndex] || !code[currentCodingIndex][selectedLanguage] || code[currentCodingIndex][selectedLanguage].trim() === ''}
+                  onClick={() => runCode('custom')}
+                  disabled={isLoading || !code || !code[codingChallenges[currentCodingIndex]?.questionId] || !code[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage] || code[codingChallenges[currentCodingIndex]?.questionId][selectedLanguage].trim() === ''}
                 >
                   {isLoading ? 'Running...' : 'Run Code'}
-                </button>
-                {/* Emergency reset button - remove in production */}
-                <button 
-                  style={{ 
-                    backgroundColor: '#ff4444', 
-                    color: 'white', 
-                    border: 'none', 
-                    padding: '5px 10px', 
-                    borderRadius: '3px',
-                    fontSize: '12px'
-                  }}
-                  onClick={resetLoadingState}
-                >
-                  Reset Loading
                 </button>
               </div>
             </div>
@@ -1125,25 +1427,52 @@ const AssessmentTaking: React.FC = () => {
             <div className="coding-content">
               <div className="problem-section">
                 <div className="problem-description">
-                  {codingChallenges[currentCodingIndex]?.description}
+                  {codingChallenges[currentCodingIndex]?.question || 'No description available'}
                 </div>
                 
                 <div className="examples">
                   <h3>Examples:</h3>
-                  {codingChallenges[currentCodingIndex]?.examples.map((example, index) => (
-                    <div key={index} className="example-item">
-                      <div className="example-label">Example {index + 1}:</div>
-                      <div className="example-content">
-                        <strong>Input:</strong> {example.input}
-                        <br />
-                        <strong>Output:</strong> {example.output}
+                  {codingChallenges[currentCodingIndex]?.examples?.length ? (
+                    codingChallenges[currentCodingIndex]?.examples?.map((example, index) => (
+                      <div key={index} className="example-item">
+                        <div className="example-label">Example {index + 1}:</div>
+                        <div className="example-content">
+                          <strong>Input:</strong> {example.input}
+                          <br />
+                          <strong>Output:</strong> {example.output}
+                        </div>
                       </div>
-                    </div>
-                  ))}
-                  <div className="note">
-                    <strong>Note for Java:</strong> Class name must be 'Main' for proper execution.
-                  </div>
+                    ))
+                  ) : (
+                    <p>No examples available</p>
+                  )}
                 </div>
+                
+                {/* Test Cases Section */}
+                {codingChallenges[currentCodingIndex]?.testCases && codingChallenges[currentCodingIndex]?.testCases.length > 0 && (
+                  <div className="test-cases-section">
+                    <h3>Test Cases:</h3>
+                    <div className="test-cases-container">
+                      {codingChallenges[currentCodingIndex]?.testCases.map((testCase, index) => (
+                        <div key={index} className="test-case-item">
+                          <div className="test-case-header">
+                            <span className="test-case-number">Test Case {index + 1}</span>
+                          </div>
+                          <div className="test-case-content">
+                            <div className="test-case-input">
+                              <strong>Input:</strong>
+                              <pre className="test-case-preformatted">{testCase.input}</pre>
+                            </div>
+                            <div className="test-case-output">
+                              <strong>Expected Output:</strong>
+                              <pre className="test-case-preformatted">{testCase.expectedOutput}</pre>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
               </div>
               
               <div className="right-column">
@@ -1156,16 +1485,9 @@ const AssessmentTaking: React.FC = () => {
                   <textarea
                     ref={codeEditorRef}
                     className="code-editor"
-                    value={code[currentCodingIndex]?.[selectedLanguage] || ''}
-                    onChange={(e) => {
-                      console.log('Textarea onChange triggered');
-                      console.log('New value:', e.target.value);
-                      console.log('Event:', e);
-                      handleCodeChange(e.target.value);
-                    }}
+                    value={code[codingChallenges[currentCodingIndex]?.questionId]?.[selectedLanguage] || ''}
+                    onChange={(e) => handleCodeChange(e.target.value)}
                     onPaste={(e) => {
-                      console.log('Textarea onPaste triggered');
-                      console.log('Pasted data:', e.clipboardData.getData('text'));
                       // Handle paste event to ensure proper scrolling
                       setTimeout(() => {
                         if (codeEditorRef.current) {
@@ -1179,9 +1501,9 @@ const AssessmentTaking: React.FC = () => {
                         e.preventDefault();
                         const { selectionStart, selectionEnd } = e.target as HTMLTextAreaElement;
                         const newValue = 
-                          code[currentCodingIndex]?.[selectedLanguage].substring(0, selectionStart) + 
+                          code[codingChallenges[currentCodingIndex]?.questionId]?.[selectedLanguage].substring(0, selectionStart) + 
                           '    ' + 
-                          code[currentCodingIndex]?.[selectedLanguage].substring(selectionEnd);
+                          code[codingChallenges[currentCodingIndex]?.questionId]?.[selectedLanguage].substring(selectionEnd);
                         
                         handleCodeChange(newValue);
                         
@@ -1193,9 +1515,6 @@ const AssessmentTaking: React.FC = () => {
                           }
                         }, 10);
                       }
-                    }}
-                    onScroll={() => {
-                      console.log('Textarea scrolled');
                     }}
                     placeholder={selectedLanguage === 'java' 
                       ? `Write your Java code here...
@@ -1243,27 +1562,27 @@ int main() {
                         <div className="spinner"></div>
                         Executing code...
                       </div>
-                    ) : executionResult[currentCodingIndex] ? (
+                    ) : executionResult[codingChallenges[currentCodingIndex]?.questionId] ? (
                       <div className="result-output">
-                        <strong>Status:</strong> {executionResult[currentCodingIndex]?.status?.description || 'Unknown'}
+                        <strong>Status:</strong> {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.status?.description || 'Unknown'}
                         <br />
-                        {executionResult[currentCodingIndex]?.stdout ? (
+                        {executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout ? (
                           <>
                             <strong>Output:</strong>
                             <br />
-                            <pre>{executionResult[currentCodingIndex]?.stdout}</pre>
+                            <pre>{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stdout}</pre>
                           </>
-                        ) : executionResult[currentCodingIndex]?.compile_output ? (
+                        ) : executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output ? (
                           <>
                             <strong>Compilation Error:</strong>
                             <br />
-                            <pre className="error-output">{executionResult[currentCodingIndex]?.compile_output}</pre>
+                            <pre className="error-output">{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.compile_output}</pre>
                           </>
-                        ) : executionResult[currentCodingIndex]?.stderr ? (
+                        ) : executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr ? (
                           <>
                             <strong>Runtime Error:</strong>
                             <br />
-                            <pre className="error-output">{executionResult[currentCodingIndex]?.stderr}</pre>
+                            <pre className="error-output">{executionResult[codingChallenges[currentCodingIndex]?.questionId]?.stderr}</pre>
                           </>
                         ) : (
                           <>
@@ -1283,6 +1602,26 @@ int main() {
               </div>
             </div>
             
+            {/* Submit button that only appears when code runs without errors */}
+            {executionResult[codingChallenges[currentCodingIndex]?.questionId] && 
+             successfulExecutions[codingChallenges[currentCodingIndex]?.questionId] && (
+              <div className="submission-section">
+                <button 
+                  className="submit-btn coding-submit"
+                  onClick={handleSubmit}
+                >
+                  Submit Code & Finish Assessment
+                </button>
+                
+                {/* Success message when all coding challenges are completed */}
+                {codingChallenges.every(challenge => successfulExecutions[challenge.questionId]) && (
+                  <div className="success-message">
+                    <p>✓ All coding challenges executed successfully! Ready to submit.</p>
+                  </div>
+                )}
+              </div>
+            )}
+            
             <div className="navigation-buttons">
               <button 
                 className="nav-btn prev"
@@ -1298,6 +1637,18 @@ int main() {
               >
                 {currentCodingIndex === codingChallenges.length - 1 ? 'Last Challenge' : 'Next Challenge'}
               </button>
+              
+              {/* Auto-submit button when on last challenge and all executed successfully */}
+              {currentCodingIndex === codingChallenges.length - 1 && 
+               codingChallenges.every(challenge => successfulExecutions[challenge.questionId]) && (
+                <button 
+                  className="submit-btn coding-submit auto-submit"
+                  onClick={handleSubmit}
+                  disabled={isSubmitting || submitted}
+                >
+                  {isSubmitting ? 'Submitting...' : 'Submit Assessment'}
+                </button>
+              )}
             </div>
           </div>
         )}
