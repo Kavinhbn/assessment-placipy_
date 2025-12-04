@@ -404,7 +404,7 @@ class PTOService {
       throw new Error('Cognito registration failed: ' + (cogErr?.message || cogErr));
     }
 
-    return item;
+    return { ...item, defaultPassword: 'Praskla@123' };
   }
 
   async updateStaff(email, id, updates) {
