@@ -304,6 +304,51 @@ router.post('/assessments', async (req, res) => {
   try {
     const email = await getEmail(req);
     const item = await ptoService.createAssessment(email, req.body);
+    
+    // Send notifications to students when PTO creates an assessment
+    try {
+      const notificationService = require('../services/NotificationService');
+      const domain = (email && email.includes('@')) ? email.split('@')[1] : 'ksrce.ac.in';
+      let studentEmails: string[] = [];
+
+      // Get target students based on departments, with fallback to all students
+      if (req.body.targetDepartments && req.body.targetDepartments.length > 0) {
+        for (const dept of req.body.targetDepartments) {
+          const deptStudents = await notificationService.getStudentsByDepartment(domain, dept);
+          studentEmails.push(...deptStudents);
+        }
+      }
+
+      // Fallback: if no students were found by department, notify all students in the domain
+      if (!studentEmails.length) {
+        studentEmails = await notificationService.getStudentsByDomain(domain);
+      }
+
+      // Remove duplicates
+      studentEmails = [...new Set(studentEmails)];
+
+      if (studentEmails.length) {
+        const priority = req.body.scheduling?.startDate ? 'medium' : 'medium';
+        await notificationService.createNotificationsForStudents(
+          studentEmails,
+          'assessment_published',
+          `New Assessment: ${req.body.name}`,
+          req.body.scheduling?.startDate 
+            ? `A new assessment "${req.body.name}" has been published and is scheduled.`
+            : `A new assessment "${req.body.name}" has been published.`,
+          `/student/assessments/${item.SK?.replace('ASSESSMENT#', '') || item.id}`,
+          priority,
+          { assessmentId: item.SK?.replace('ASSESSMENT#', '') || item.id }
+        );
+        console.log(`Sent notifications to ${studentEmails.length} students for PTO-created assessment`);
+      } else {
+        console.log('No students found to notify for PTO-created assessment');
+      }
+    } catch (notifError) {
+      console.error('Error sending notifications for PTO-created assessment:', notifError);
+      // Don't fail the request if notifications fail
+    }
+    
     res.status(201).json({ success: true, data: item });
   } catch (error) {
     res.status(500).json({ success: false, message: 'Failed to create assessment', error: error.message });
