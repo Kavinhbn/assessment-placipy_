@@ -129,6 +129,8 @@
   font-size: 0.9rem;
   min-width: 120px;
   text-align: center;
+  position: relative;
+  z-index: 1001; /* Ensure it's above other elements */
 }
 
 .submit-btn.small:hover:not(:disabled) {
@@ -142,6 +144,17 @@
   cursor: not-allowed;
   box-shadow: none;
   transform: none;
+}
+
+/* Make submit button pulse to attract attention when visible */
+.submit-btn.small:not(:disabled) {
+  animation: pulseSubmit 2s infinite;
+}
+
+@keyframes pulseSubmit {
+  0% { box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3); }
+  50% { box-shadow: 0 2px 12px rgba(76, 175, 80, 0.6); }
+  100% { box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3); }
 }
 
 /* Tab navigation removed - using header buttons instead */
@@ -881,7 +894,7 @@ input:checked + .slider:before {
   bottom: 0;
   left: 0;
   right: 0;
-  z-index: 100;
+  z-index: 1000;
   width: 100%;
 }
 
@@ -921,6 +934,7 @@ input:checked + .slider:before {
   box-shadow: 0 2px 6px rgba(76, 175, 80, 0.3);
   margin: 0 15px;
   min-width: 100px;
+  animation: pulseSubmit 2s infinite; /* Add pulsing effect */
 }
 
 .navigation-buttons .submit-btn.small:hover:not(:disabled) {
@@ -1251,7 +1265,7 @@ input:checked + .slider:before {
   flex-direction: column;
   border: none;
   overflow: visible; /* Allow content to overflow if needed */
-  min-height: 1450px; /* Slightly larger than editor to accommodate header */
+  min-height: auto; /* Allow section to size naturally */
 }
 
 .code-editor {

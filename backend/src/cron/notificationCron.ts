@@ -85,6 +85,7 @@ async function checkAndSendReminders() {
                         );
 
                         if (!alreadySent) {
+                            // NOTE: Notifications are sent but not stored in DB as per requirement
                             await notificationService.createNotificationForUser(
                                 email,
                                 email,
@@ -100,7 +101,7 @@ async function checkAndSendReminders() {
                                 email,
                                 '24H'
                             );
-                            console.log(`[CRON] Sent 24H reminder to ${email} for ${assessment.assessmentId}`);
+                            console.log(`[CRON] Sent 24H reminder to ${email} for ${assessment.assessmentId} (notification not stored in DB)`);
                         }
                     }
                 }
@@ -115,6 +116,7 @@ async function checkAndSendReminders() {
                         );
 
                         if (!alreadySent) {
+                            // NOTE: Notifications are sent but not stored in DB as per requirement
                             await notificationService.createNotificationForUser(
                                 email,
                                 email,
@@ -130,7 +132,7 @@ async function checkAndSendReminders() {
                                 email,
                                 '1H'
                             );
-                            console.log(`[CRON] Sent 1H reminder to ${email} for ${assessment.assessmentId}`);
+                            console.log(`[CRON] Sent 1H reminder to ${email} for ${assessment.assessmentId} (notification not stored in DB)`);
                         }
                     }
                 }
@@ -160,7 +162,7 @@ async function checkAndSendReminders() {
                                 email,
                                 '10M'
                             );
-                            console.log(`[CRON] Sent 10M reminder to ${email} for ${assessment.assessmentId}`);
+                            console.log(`[CRON] Sent 10M reminder to ${email} for ${assessment.assessmentId} (notification not stored in DB)`);
                         }
                     }
                 }

@@ -28,44 +28,30 @@ class NotificationService {
 
     /**
      * Get all notifications for the current user
+     * Returns empty array since notifications are not stored in DB
      */
     async getNotifications(limit: number = 50, lastKey?: string): Promise<{ items: Notification[]; lastKey?: string }> {
         try {
-            const params: any = { limit };
-            if (lastKey) {
-                params.lastKey = JSON.stringify(lastKey);
-            }
-
-            const response = await axios.get(API_BASE_URL, {
-                headers: this.getAuthHeaders(),
-                params
-            });
-
+            // Since notifications are not stored in DB, return empty array
+            console.log('Returning empty notifications (notifications not stored in DB)');
             return {
-                items: response.data.data || [],
-                lastKey: response.data.lastKey
+                items: [],
+                lastKey: undefined
             };
         } catch (error: any) {
             console.error('Error fetching notifications:', error);
-            if (error.response?.status === 404) {
-                return { items: [] };
-            }
             throw new Error(error.response?.data?.message || 'Failed to fetch notifications');
         }
     }
 
     /**
      * Mark a notification as read
+     * No-op since notifications are not stored in DB
      */
     async markAsRead(notificationId: string): Promise<void> {
         try {
-            // Ensure we're using the correct ID format
-            const id = notificationId.startsWith('NOTIF#') ? notificationId.replace('NOTIF#', '') : notificationId;
-            await axios.post(
-                `${API_BASE_URL}/${encodeURIComponent(id)}/read`,
-                {},
-                { headers: this.getAuthHeaders() }
-            );
+            // No-op since notifications are not stored in DB
+            console.log(`Marking notification ${notificationId} as read (no DB operation)`);
         } catch (error: any) {
             console.error('Error marking notification as read:', error);
             throw new Error(error.response?.data?.message || 'Failed to mark notification as read');
@@ -74,14 +60,12 @@ class NotificationService {
 
     /**
      * Mark all notifications as read
+     * No-op since notifications are not stored in DB
      */
-    async markAllAsRead(): Promise<void> {  // Changed return type to void to match interface
+    async markAllAsRead(): Promise<void> {
         try {
-            await axios.post(
-                `${API_BASE_URL}/mark-all`,
-                {},
-                { headers: this.getAuthHeaders() }
-            );
+            // No-op since notifications are not stored in DB
+            console.log('Marking all notifications as read (no DB operation)');
         } catch (error: any) {
             console.error('Error marking all notifications as read:', error);
             throw new Error(error.response?.data?.message || 'Failed to mark all notifications as read');

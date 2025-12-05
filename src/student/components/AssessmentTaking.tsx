@@ -1095,26 +1095,44 @@ console.log("In a browser environment, this would render as HTML");
     return () => clearInterval(interval);
   }, []);
 
-  // Add useEffect to show submit button after 20 minutes
+  // Add useEffect to show submit button after a percentage of the assessment time
   useEffect(() => {
     if (!assessmentData || loading) return;
-    
-    // Calculate 20 minutes in seconds
-    const twentyMinutesInSeconds = 20 * 60;
     
     // Get assessment duration in seconds
     const assessmentDuration = (assessmentData.configuration?.duration || 60) * 60;
     
-    console.log('Submit button logic:', { assessmentDuration, twentyMinutesInSeconds });
+    // Calculate when to show submit button based on assessment duration
+    // For shorter assessments, show button sooner (higher percentage)
+    // For longer assessments, show button later (lower percentage)
+    let showButtonAfterPercentage;
+    if (assessmentDuration <= 5 * 60) {  // 5 minutes or less
+      showButtonAfterPercentage = 0.66; // Show after 66% (e.g., 2 min for 3 min test)
+    } else if (assessmentDuration <= 30 * 60) {  // 30 minutes or less
+      showButtonAfterPercentage = 0.5; // Show after 50%
+    } else {  // Longer assessments
+      showButtonAfterPercentage = 0.33; // Show after 33% (e.g., 20 min for 60 min test)
+    }
     
-    // Always show submit button after 20 minutes regardless of assessment duration
-    // This ensures consistent behavior across all assessments
+    const showButtonAfterSeconds = Math.floor(assessmentDuration * showButtonAfterPercentage);
+    
+    console.log('Setting up submit button timer:', { 
+      assessmentDuration, 
+      showButtonAfterPercentage, 
+      showButtonAfterSeconds 
+    });
+    
+    // Show submit button after calculated time
     const timer = setTimeout(() => {
-      console.log('Showing submit button after 20 minutes');
+      console.log('Showing submit button after', showButtonAfterSeconds, 'seconds');
       setShowSubmitButton(true);
-    }, twentyMinutesInSeconds * 1000);
+    }, showButtonAfterSeconds * 1000);
     
-    return () => clearTimeout(timer);
+    // Don't clear the timer on component re-render - only clear when component unmounts
+    return () => {
+      console.log('Clearing submit button timer');
+      clearTimeout(timer);
+    };
   }, [assessmentData, loading]);
 
   // Add useEffect to handle assessment timing logic
@@ -1601,17 +1619,6 @@ console.log("In a browser environment, this would render as HTML");
                 {isLoading ? 'Running...' : 'Run Code'}
               </button>
             </>
-          )}
-
-          {/* Submit button - visible after 20 minutes */}
-          {showSubmitButton && (
-            <button
-              className="submit-btn small"
-              onClick={handleSubmit}
-              disabled={isSubmitting || submitted}
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit'}
-            </button>
           )}
 
           <button

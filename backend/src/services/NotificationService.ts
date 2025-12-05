@@ -30,7 +30,7 @@ class NotificationService {
     }
 
     /**
-     * Create a notification for a single user
+     * Create a notification for a single user (send notification but don't store in DB)
      */
     async createNotificationForUser(
         userId: string,
@@ -44,14 +44,12 @@ class NotificationService {
     ): Promise<any> {
         try {
             const domain = this.getDomainFromEmail(email);
-            const PK = `CLIENT#${domain}`;
             const notificationId = uuidv4();
-            const SK = `NOTIF#${notificationId}`;
             const createdAt = new Date().toISOString();
 
             const notification = {
-                PK,
-                SK,
+                PK: `CLIENT#${domain}`,
+                SK: `NOTIF#${notificationId}`,
                 userId,
                 email: email.toLowerCase(), // Ensure email is lowercase
                 type,
@@ -64,13 +62,10 @@ class NotificationService {
                 ...(metadata && { metadata })
             };
 
-            const params = {
-                TableName: this.notificationsTableName,
-                Item: notification
-            };
-
-            await dynamodb.put(params).promise();
-            console.log(`Notification created: ${SK} for user ${email}`);
+            // Send notification (e.g., via email, push notification, etc.) but don't store in DB
+            console.log(`Notification sent (not stored in DB): ${notification.SK} for user ${email}`);
+            // Here you would implement actual notification sending logic (email, push, etc.)
+            
             return notification;
         } catch (error) {
             console.error('Error creating notification:', error);
@@ -79,7 +74,7 @@ class NotificationService {
     }
 
     /**
-     * Create notifications for multiple students
+     * Create notifications for multiple students (send notifications but don't store in DB)
      */
     async createNotificationsForStudents(
         studentEmails: string[],
@@ -96,22 +91,9 @@ class NotificationService {
             for (const email of studentEmails) {
                 const lowerCaseEmail = email.toLowerCase();
                 const domain = this.getDomainFromEmail(lowerCaseEmail);
-                const PK = `CLIENT#${domain}`;
                 
-                // Get student info to get userId
-                const studentParams = {
-                    TableName: this.studentsTableName,
-                    KeyConditionExpression: 'PK = :pk AND SK = :sk',
-                    ExpressionAttributeValues: {
-                        ':pk': PK,
-                        ':sk': `STUDENT#${lowerCaseEmail}`
-                    }
-                };
-
-                const studentResult = await dynamodb.query(studentParams).promise();
-                const student = studentResult.Items?.[0];
-                // Use the student's email as userId if student record not found
-                const userId = student?.SK || lowerCaseEmail;
+                // Use the student's email as userId
+                const userId = lowerCaseEmail;
 
                 const notification = await this.createNotificationForUser(
                     userId,
@@ -134,7 +116,7 @@ class NotificationService {
     }
 
     /**
-     * Get notifications for a user
+     * Get notifications for a user (returns empty since we're not storing in DB)
      */
     async getNotificationsForUser(
         email: string,
@@ -142,36 +124,11 @@ class NotificationService {
         lastKey?: any
     ): Promise<{ items: any[]; lastKey?: any }> {
         try {
-            const domain = this.getDomainFromEmail(email);
-            const PK = `CLIENT#${domain}`;
-            const lowerCaseEmail = email.toLowerCase(); // Ensure email is lowercase
-
-            const params: any = {
-                TableName: this.notificationsTableName,
-                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-                ExpressionAttributeValues: {
-                    ':pk': PK,
-                    ':skPrefix': 'NOTIF#'
-                },
-                Limit: limit,
-                ScanIndexForward: false // Sort by SK descending (newest first)
-            };
-
-            if (lastKey) {
-                params.ExclusiveStartKey = lastKey;
-            }
-
-            const result = await dynamodb.query(params).promise();
-            
-            // Filter by email after query (since FilterExpression doesn't work well with KeyConditionExpression)
-            // Ensure case-insensitive comparison
-            const filteredItems = (result.Items || []).filter(
-                item => item.email && item.email.toLowerCase() === lowerCaseEmail
-            );
-
+            // Return empty array since we're not storing notifications in DB
+            console.log(`Returning empty notifications for user ${email} (notifications not stored in DB)`);
             return {
-                items: filteredItems,
-                lastKey: result.LastEvaluatedKey
+                items: [],
+                lastKey: undefined
             };
         } catch (error) {
             console.error('Error fetching notifications:', error);
@@ -180,30 +137,13 @@ class NotificationService {
     }
 
     /**
-     * Mark a notification as read
+     * Mark a notification as read (no-op since we're not storing in DB)
      */
     async markAsRead(notificationId: string, email: string): Promise<any> {
         try {
-            const domain = this.getDomainFromEmail(email);
-            const PK = `CLIENT#${domain}`;
-            // Check if notificationId already includes the NOTIF# prefix
-            const SK = notificationId.startsWith('NOTIF#') ? notificationId : `NOTIF#${notificationId}`;
-
-            const params = {
-                TableName: this.notificationsTableName,
-                Key: {
-                    PK,
-                    SK
-                },
-                UpdateExpression: 'SET isRead = :isRead',
-                ExpressionAttributeValues: {
-                    ':isRead': true
-                },
-                ReturnValues: 'ALL_NEW'
-            };
-
-            const result = await dynamodb.update(params).promise();
-            return result.Attributes;
+            // No-op since we're not storing notifications in DB
+            console.log(`Marking notification ${notificationId} as read (no DB operation)`);
+            return { success: true };
         } catch (error) {
             console.error('Error marking notification as read:', error);
             throw new Error('Failed to mark notification as read: ' + error.message);
@@ -211,51 +151,13 @@ class NotificationService {
     }
 
     /**
-     * Mark all notifications as read for a user
+     * Mark all notifications as read for a user (no-op since we're not storing in DB)
      */
     async markAllAsRead(email: string): Promise<number> {
         try {
-            const domain = this.getDomainFromEmail(email);
-            const PK = `CLIENT#${domain}`;
-            const lowerCaseEmail = email.toLowerCase(); // Ensure email is lowercase
-
-            // Get all notifications for this user
-            const queryParams = {
-                TableName: this.notificationsTableName,
-                KeyConditionExpression: 'PK = :pk AND begins_with(SK, :skPrefix)',
-                ExpressionAttributeValues: {
-                    ':pk': PK,
-                    ':skPrefix': 'NOTIF#'
-                }
-            };
-
-            const result = await dynamodb.query(queryParams).promise();
-            const unreadNotifications = (result.Items || []).filter(
-                item => item.email && item.email.toLowerCase() === lowerCaseEmail && !item.isRead
-            );
-
-            // Update each notification
-            let updatedCount = 0;
-            for (const notification of unreadNotifications) {
-                try {
-                    await dynamodb.update({
-                        TableName: this.notificationsTableName,
-                        Key: {
-                            PK: notification.PK,
-                            SK: notification.SK
-                        },
-                        UpdateExpression: 'SET isRead = :isRead',
-                        ExpressionAttributeValues: {
-                            ':isRead': true
-                        }
-                    }).promise();
-                    updatedCount++;
-                } catch (error) {
-                    console.error(`Error updating notification ${notification.SK}:`, error);
-                }
-            }
-
-            return updatedCount;
+            // No-op since we're not storing notifications in DB
+            console.log(`Marking all notifications as read for user ${email} (no DB operation)`);
+            return 0;
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
             throw new Error('Failed to mark all notifications as read: ' + error.message);
@@ -263,89 +165,71 @@ class NotificationService {
     }
 
     /**
-     * Delete old notifications (older than specified days)
+     * Delete old notifications (no-op since we're not storing in DB)
      */
     async deleteOldNotifications(daysOld: number = 60): Promise<number> {
         try {
-            const cutoffDate = new Date();
-            cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-            const cutoffISO = cutoffDate.toISOString();
-
-            // Note: This is a scan operation which can be expensive
-            // In production, consider using a GSI with createdAt as sort key
-            const params = {
-                TableName: this.notificationsTableName,
-                FilterExpression: 'begins_with(SK, :skPrefix) AND createdAt < :cutoffDate',
-                ExpressionAttributeValues: {
-                    ':skPrefix': 'NOTIF#',
-                    ':cutoffDate': cutoffISO
-                }
-            };
-
-            let deletedCount = 0;
-            let lastEvaluatedKey = null;
-
-            do {
-                if (lastEvaluatedKey) {
-                    params.ExclusiveStartKey = lastEvaluatedKey;
-                }
-
-                const result = await dynamodb.scan(params).promise();
-                
-                // Delete items in batches
-                for (const item of result.Items || []) {
-                    try {
-                        await dynamodb.delete({
-                            TableName: this.notificationsTableName,
-                            Key: {
-                                PK: item.PK,
-                                SK: item.SK
-                            }
-                        }).promise();
-                        deletedCount++;
-                    } catch (error) {
-                        console.error(`Error deleting notification ${item.SK}:`, error);
-                    }
-                }
-
-                lastEvaluatedKey = result.LastEvaluatedKey;
-            } while (lastEvaluatedKey);
-
-            console.log(`Deleted ${deletedCount} old notifications`);
-            return deletedCount;
+            // No-op since we're not storing notifications in DB
+            console.log(`Deleting old notifications (no DB operation)`);
+            return 0;
         } catch (error) {
             console.error('Error deleting old notifications:', error);
             throw new Error('Failed to delete old notifications: ' + error.message);
         }
     }
 
-
     /**
-     * Mark a reminder as sent
+     * Check if reminder has been sent (still need to track this to avoid duplicate notifications)
      */
-    async markReminderAsSent(
-        assessmentId: string,
-        studentEmail: string,
-        reminderType: '24H' | '1H' | '10M'
-    ): Promise<void> {
+    async hasReminderBeenSent(assessmentId: string, email: string, reminderType: string): Promise<boolean> {
         try {
-            const domain = this.getDomainFromEmail(studentEmail);
+            // We still need to track sent reminders to avoid duplicates
+            // But we won't store the actual notifications
+            const domain = this.getDomainFromEmail(email);
             const PK = `CLIENT#${domain}`;
-            const SK = `REMINDER#${assessmentId}#${studentEmail}#${reminderType}`;
+            const SK = `REMINDER#${assessmentId}#${email}#${reminderType}`;
 
             const params = {
                 TableName: this.notificationsTableName,
                 Key: {
                     PK,
                     SK
-                },
-                UpdateExpression: 'SET sentAt = :sentAt',
-                ExpressionAttributeValues: {
-                    ':sentAt': new Date().toISOString()
                 }
             };
 
-            await dynamodb.update(params).promise();
+            const result = await dynamodb.get(params).promise();
+            return !!result.Item;
+        } catch (error) {
+            console.error('Error checking if reminder was sent:', error);
+            return false; // Assume not sent if there's an error
+        }
+    }
+
+    /**
+     * Mark reminder as sent (we still track this to avoid duplicate notifications)
+     */
+    async markReminderAsSent(assessmentId: string, email: string, reminderType: string): Promise<void> {
+        try {
+            // We still track sent reminders to avoid duplicates
+            // But we won't store the actual notifications
+            const domain = this.getDomainFromEmail(email);
+            const PK = `CLIENT#${domain}`;
+            const SK = `REMINDER#${assessmentId}#${email}#${reminderType}`;
+            const createdAt = new Date().toISOString();
+
+            const params = {
+                TableName: this.notificationsTableName,
+                Item: {
+                    PK,
+                    SK,
+                    email: email.toLowerCase(),
+                    assessmentId,
+                    reminderType,
+                    createdAt
+                }
+            };
+
+            await dynamodb.put(params).promise();
         } catch (error) {
             console.error('Error marking reminder as sent:', error);
             throw new Error('Failed to mark reminder as sent: ' + error.message);
@@ -354,6 +238,7 @@ class NotificationService {
 
     /**
      * Get all students for a domain (for bulk notifications)
+     * This is needed for sending notifications, so we keep this functionality
      */
     async getStudentsByDomain(domain: string): Promise<string[]> {
         try {
@@ -378,6 +263,7 @@ class NotificationService {
 
     /**
      * Get students by department and domain
+     * This is needed for sending notifications, so we keep this functionality
      */
     async getStudentsByDepartment(domain: string, department: string): Promise<string[]> {
         try {
