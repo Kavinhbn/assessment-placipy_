@@ -49,19 +49,17 @@ async function getEmailFromRequest(req: any): Promise<string> {
 /**
  * GET /api/student/notifications
  * Get all notifications for the authenticated student
+ * Returns empty array since notifications are not stored in DB
  */
 router.get('/', authMiddleware.authenticateToken, async (req, res) => {
     try {
-        const email = await getEmailFromRequest(req);
-        const limit = req.query.limit ? parseInt(req.query.limit as string) : 50;
-        const lastKey = req.query.lastKey ? JSON.parse(req.query.lastKey as string) : null;
-
-        const result = await notificationService.getNotificationsForUser(email, limit, lastKey);
+        // Since notifications are not stored in DB, return empty array
+        console.log('Returning empty notifications (notifications not stored in DB)');
         
         res.status(200).json({
             success: true,
-            data: result.items,
-            lastKey: result.lastKey
+            data: [],
+            lastKey: undefined
         });
     } catch (error: any) {
         console.error('Error fetching notifications:', error);
@@ -75,13 +73,12 @@ router.get('/', authMiddleware.authenticateToken, async (req, res) => {
 /**
  * POST /api/student/notifications/:id/read
  * Mark a specific notification as read
+ * No-op since notifications are not stored in DB
  */
 router.post('/:id/read', authMiddleware.authenticateToken, async (req, res) => {
     try {
-        const email = await getEmailFromRequest(req);
-        const notificationId = req.params.id;
-
-        await notificationService.markAsRead(notificationId, email);
+        // No-op since notifications are not stored in DB
+        console.log(`Marking notification ${req.params.id} as read (no DB operation)`);
         
         res.status(200).json({
             success: true,
@@ -99,16 +96,17 @@ router.post('/:id/read', authMiddleware.authenticateToken, async (req, res) => {
 /**
  * POST /api/student/notifications/mark-all
  * Mark all notifications as read for the authenticated student
+ * No-op since notifications are not stored in DB
  */
 router.post('/mark-all', authMiddleware.authenticateToken, async (req, res) => {
     try {
-        const email = await getEmailFromRequest(req);
-        const count = await notificationService.markAllAsRead(email);
+        // No-op since notifications are not stored in DB
+        console.log('Marking all notifications as read (no DB operation)');
         
         res.status(200).json({
             success: true,
-            message: `Marked ${count} notifications as read`,
-            count
+            message: 'Marked all notifications as read',
+            count: 0
         });
     } catch (error: any) {
         console.error('Error marking all notifications as read:', error);
@@ -120,4 +118,3 @@ router.post('/mark-all', authMiddleware.authenticateToken, async (req, res) => {
 });
 
 module.exports = router;
-

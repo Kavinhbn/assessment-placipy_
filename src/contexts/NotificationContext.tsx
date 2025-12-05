@@ -8,8 +8,10 @@ interface NotificationContextType {
     loading: boolean;
     fetchNotifications: () => Promise<void>;
     markAsRead: (notificationId: string) => Promise<void>;
-    markAllAsRead: () => Promise<void>;  // Changed return type to Promise<void>
+    markAllAsRead: () => Promise<void>;
     lastNotificationId: string | null;
+    // Add method to add temporary notifications
+    addTemporaryNotification: (notification: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
@@ -25,26 +27,50 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const popupShownRef = useRef<Set<string>>(new Set());
+    const tempNotificationsRef = useRef<Notification[]>([]);
 
-    // Fetch notifications
+    // Add temporary notification (not stored in DB)
+    const addTemporaryNotification = useCallback((notificationData: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => {
+        const tempNotification: Notification = {
+            ...notificationData,
+            createdAt: new Date().toISOString(),
+            isRead: false,
+            SK: `TEMP_NOTIF#${Date.now()}`,
+            PK: 'TEMP'
+        };
+        
+        // Add to temporary notifications array
+        tempNotificationsRef.current = [tempNotification, ...tempNotificationsRef.current].slice(0, 50); // Keep only last 50
+        
+        // Update state to trigger re-render
+        setNotifications(prev => [tempNotification, ...prev.slice(0, 49)]); // Keep only last 50
+        setUnreadCount(prev => prev + 1);
+        
+        // Trigger popup event
+        window.dispatchEvent(new CustomEvent('newNotification', { detail: tempNotification }));
+        
+        return tempNotification;
+    }, []);
+
+    // Fetch notifications (will return empty since we're not storing in DB)
     const fetchNotifications = useCallback(async () => {
         try {
-            const result = await NotificationService.getNotifications(50);
-            const fetchedNotifications = result.items || [];
+            // Since notifications are not stored in DB, we'll use temporary notifications
+            const tempNotifications = tempNotificationsRef.current;
             
             // Sort by createdAt descending (newest first)
-            fetchedNotifications.sort((a, b) => {
+            const sortedNotifications = [...tempNotifications].sort((a, b) => {
                 const dateA = new Date(a.createdAt).getTime();
                 const dateB = new Date(b.createdAt).getTime();
                 return dateB - dateA;
             });
 
             // Check for new notifications
-            if (lastNotificationId && fetchedNotifications.length > 0) {
-                const newestId = fetchedNotifications[0].SK || fetchedNotifications[0].createdAt;
+            if (lastNotificationId && sortedNotifications.length > 0) {
+                const newestId = sortedNotifications[0].SK || sortedNotifications[0].createdAt;
                 if (newestId !== lastNotificationId) {
                     // Find new notifications
-                    const newNotifications = fetchedNotifications.filter(notif => {
+                    const newNotifications = sortedNotifications.filter(notif => {
                         const notifId = notif.SK || notif.createdAt;
                         return notifId !== lastNotificationId && !notif.isRead && !popupShownRef.current.has(notifId);
                     });
@@ -60,14 +86,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                         }
                     }
                 }
-            } else if (fetchedNotifications.length > 0) {
+            } else if (sortedNotifications.length > 0) {
                 // First load - set last notification ID
-                const newestId = fetchedNotifications[0].SK || fetchedNotifications[0].createdAt;
+                const newestId = sortedNotifications[0].SK || sortedNotifications[0].createdAt;
                 setLastNotificationId(newestId);
             }
 
-            setNotifications(fetchedNotifications);
-            setUnreadCount(fetchedNotifications.filter(n => !n.isRead).length);
+            setNotifications(sortedNotifications);
+            setUnreadCount(sortedNotifications.filter(n => !n.isRead).length);
         } catch (error) {
             console.error('Error fetching notifications:', error);
         } finally {
@@ -78,16 +104,18 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark notification as read
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
-            // Ensure we're using the correct ID format for the API call
-            const apiNotificationId = notificationId.startsWith('NOTIF#') ? notificationId.replace('NOTIF#', '') : notificationId;
-            await NotificationService.markAsRead(apiNotificationId);
+            // Update temporary notifications
+            tempNotificationsRef.current = tempNotificationsRef.current.map(notif => {
+                if (notif.SK === notificationId) {
+                    return { ...notif, isRead: true };
+                }
+                return notif;
+            });
+            
+            // Update state
             setNotifications(prev => 
                 prev.map(notif => {
-                    // Check if this is the notification we're marking as read
-                    const notifId = notif.SK ? String(notif.SK).replace('NOTIF#', '') : notif.createdAt;
-                    const targetId = apiNotificationId.startsWith('NOTIF#') ? apiNotificationId.replace('NOTIF#', '') : apiNotificationId;
-                    
-                    if (notifId === targetId) {
+                    if (notif.SK === notificationId) {
                         return { ...notif, isRead: true };
                     }
                     return notif;
@@ -103,7 +131,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
         try {
-            await NotificationService.markAllAsRead();
+            // Update temporary notifications
+            tempNotificationsRef.current = tempNotificationsRef.current.map(notif => ({ ...notif, isRead: true }));
+            
+            // Update state
             setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
             setUnreadCount(0);
         } catch (error) {
@@ -139,7 +170,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                 fetchNotifications,
                 markAsRead,
                 markAllAsRead,
-                lastNotificationId
+                lastNotificationId,
+                addTemporaryNotification
             }}
         >
             {children}

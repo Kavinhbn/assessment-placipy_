@@ -286,6 +286,7 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
         
         // Send notifications if assessment is published
+        // NOTE: Notifications are sent but not stored in DB as per requirement
         if (assessmentData.isPublished && result) {
             try {
                 // Use dynamic domain detection - start with creator's domain
@@ -340,7 +341,7 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
                         priority,
                         { assessmentId: result.assessmentId || result.assessmentId }
                     );
-                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment (notifications not stored in DB)`);
                 } else {
                     console.log('No students found to notify for published assessment');
                 }
@@ -402,6 +403,7 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
         const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
         
         // Send notifications if assessment is being published
+        // NOTE: Notifications are sent but not stored in DB as per requirement
         if (isBeingPublished && result) {
             try {
                 // Use dynamic domain detection - start with updater's domain
@@ -457,7 +459,7 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
                         priority,
                         { assessmentId: id }
                     );
-                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment`);
+                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment (notifications not stored in DB)`);
                 } else {
                     console.log('No students found to notify for published assessment update');
                 }
