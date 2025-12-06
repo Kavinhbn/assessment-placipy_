@@ -1,76 +1,62 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Bell } from 'lucide-react';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../contexts/useNotifications';
 
 const NotificationBell: React.FC = () => {
-    const navigate = useNavigate();
-    const { unreadCount, notifications } = useNotifications();
+  const navigate = useNavigate();
+  const { notifications, unreadCount } = useNotifications();
 
-    // Determine badge color based on priority
-    const getBadgeColor = (): string => {
-        if (unreadCount === 0) return 'transparent';
-        
-        const unreadNotifications = notifications.filter(n => !n.isRead);
-        const hasHigh = unreadNotifications.some(n => n.priority === 'high');
-        const hasMedium = unreadNotifications.some(n => n.priority === 'medium');
-        
-        if (hasHigh) return '#EF4444'; // red
-        if (hasMedium) return '#F59E0B'; // orange
-        return '#6B7280'; // gray
-    };
+  const badgeColor = useMemo(() => {
+    const unread = notifications.filter(n => !n.isRead);
+    const priorities = unread.map(n => n.priority);
+    if (priorities.includes('high')) return '#EF4444';
+    if (priorities.includes('medium')) return '#F59E0B';
+    if (priorities.length > 0) return '#6B7280';
+    return 'transparent';
+  }, [notifications]);
 
-    const badgeColor = getBadgeColor();
+  const hasUnread = unreadCount > 0;
 
-    return (
-        <div
-            style={{
-                position: 'relative',
-                cursor: 'pointer',
-                padding: '8px',
-                borderRadius: '8px',
-                transition: 'background-color 0.2s'
-            }}
-            onClick={() => navigate('/student/notifications')}
-            onMouseEnter={(e) => {
-                (e.currentTarget as HTMLDivElement).style.backgroundColor = '#F3F4F6';
-            }}
-            onMouseLeave={(e) => {
-                (e.currentTarget as HTMLDivElement).style.backgroundColor = 'transparent';
-            }}
+  return (
+    <button
+      aria-label="Notifications"
+      title="Notifications"
+      onClick={() => navigate('/student/notifications')}
+      style={{
+        position: 'relative',
+        background: 'transparent',
+        border: 'none',
+        cursor: 'pointer',
+        padding: 0,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center'
+      }}
+    >
+      <Bell size={24} color={hasUnread ? '#523C48' : '#6B7280'} />
+      {hasUnread && (
+        <span
+          style={{
+            position: 'absolute',
+            top: -4,
+            right: -4,
+            background: badgeColor,
+            color: '#FFFFFF',
+            borderRadius: 12,
+            padding: '0 6px',
+            fontSize: 11,
+            fontWeight: 700,
+            minWidth: 18,
+            lineHeight: '18px',
+            textAlign: 'center'
+          }}
         >
-            <Bell 
-                size={24} 
-                color="#374151"
-                style={{ display: 'block' }}
-            />
-            {unreadCount > 0 && (
-                <div
-                    style={{
-                        position: 'absolute',
-                        top: '4px',
-                        right: '4px',
-                        minWidth: '18px',
-                        height: '18px',
-                        borderRadius: '9px',
-                        backgroundColor: badgeColor,
-                        color: 'white',
-                        fontSize: '11px',
-                        fontWeight: 'bold',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        padding: '0 4px',
-                        border: '2px solid white',
-                        boxShadow: '0 2px 4px rgba(0,0,0,0.2)'
-                    }}
-                >
-                    {unreadCount > 99 ? '99+' : unreadCount}
-                </div>
-            )}
-        </div>
-    );
+          {unreadCount}
+        </span>
+      )}
+    </button>
+  );
 };
 
 export default NotificationBell;
-

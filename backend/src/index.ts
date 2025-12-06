@@ -30,9 +30,6 @@ const server = app.listen(PORT, () => {
     }
 });
 
-// Start notification cron jobs
-const { startNotificationCron } = require('./cron/notificationCron');
-startNotificationCron();
 
 // Provide a clearer error message for common startup errors
 server.on('error', (err: any) => {

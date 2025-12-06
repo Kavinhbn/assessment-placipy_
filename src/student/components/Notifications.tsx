@@ -1,10 +1,10 @@
 import React, { useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { AlertCircle, CheckCircle, Clock, Megaphone } from 'lucide-react';
-import { useNotifications } from '../../contexts/NotificationContext';
+import { useNotifications } from '../../contexts/useNotifications';
 import type { Notification } from '../../services/notification.service';
 
-type TabKey = 'all' | 'assessments' | 'results' | 'general';
+type TabKey = 'all' | 'assessments' | 'results' | 'reminders' | 'general';
 
 const Notifications: React.FC = () => {
   const { notifications, markAsRead, markAllAsRead, loading } = useNotifications();
@@ -50,6 +50,9 @@ const Notifications: React.FC = () => {
     if (activeTab === 'general') {
       return notifications.filter((n) => n.type === 'announcement');
     }
+    if (activeTab === 'reminders') {
+      return notifications.filter((n) => n.type === 'reminder');
+    }
     return notifications;
   }, [notifications, activeTab]);
 
@@ -59,6 +62,8 @@ const Notifications: React.FC = () => {
         return <AlertCircle size={20} color={color} />;
       case 'result_published':
         return <CheckCircle size={20} color={color} />;
+      case 'reminder':
+        return <Clock size={20} color={color} />;
 
       case 'announcement':
       default:
@@ -121,6 +126,13 @@ const Notifications: React.FC = () => {
           onClick={() => setActiveTab('results')}
         >
           Results
+        </button>
+
+        <button
+          className={`tab-btn ${activeTab === 'reminders' ? 'active' : ''}`}
+          onClick={() => setActiveTab('reminders')}
+        >
+          Reminders
         </button>
 
         <button

@@ -1,13 +1,9 @@
-import axios from 'axios';
-
-const API_BASE_URL = '/api/student/notifications';
-
 export interface Notification {
     PK?: string;
     SK?: string;
     userId?: string;
     email?: string;
-    type: 'assessment_published' | 'result_published' | 'announcement';
+    type: 'assessment_published' | 'result_published' | 'announcement' | 'reminder';
     title: string;
     message: string;
     link: string;
@@ -18,13 +14,6 @@ export interface Notification {
 }
 
 class NotificationService {
-    private getAuthHeaders() {
-        const token = localStorage.getItem('accessToken');
-        return {
-            'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json'
-        };
-    }
 
     /**
      * Get all notifications for the current user

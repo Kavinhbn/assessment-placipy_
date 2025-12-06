@@ -18,7 +18,6 @@ const codeEvaluationRoutes = require('./routes/codeEvaluation.routes');
 const resultsRoutes = require('./routes/results.routes');
 const studentAssessmentRoutes = require('./routes/student.assessment.routes');
 const studentSubmissionRoutes = require('./routes/student.submission.routes');
-const notificationRoutes = require('./routes/notification.routes');
 
 console.log('Routes loaded successfully');
 
@@ -71,7 +70,6 @@ app.use('/api/pto', ptoRoutes);
 app.use('/api/code-evaluation', codeEvaluationRoutes);
 app.use('/api/results', resultsRoutes);
 app.use('/api/student-assessments', studentAssessmentRoutes);
-app.use('/api/student/notifications', notificationRoutes);
 app.use('/api/student', studentSubmissionRoutes);
 console.log('Routes registered successfully');
 

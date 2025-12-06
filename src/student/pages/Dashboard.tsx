@@ -11,6 +11,7 @@ import AssessmentSubmitted from './AssessmentSubmitted';
 import ResultDetail from './ResultDetail';
 import '../styles/Dashboard.css';
 import NotificationPopup from '../components/NotificationPopup';
+import NotificationBell from '../components/NotificationBell';
 import type { Notification } from '../../services/notification.service';
 import AuthService from '../../services/auth.service';
 import { useUser } from '../../contexts/UserContext';
@@ -199,12 +200,15 @@ const StudentDashboard: React.FC = () => {
         {!isAssessmentActive && (
           <header className="dashboard-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
             <h1>{user?.name ? `Welcome, ${user.name}!` : 'Welcome, Student!'}</h1>
-            <Link to="/student/profile" className="profile-btn" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <NotificationBell />
+              <Link to="/student/profile" className="profile-btn" style={{ display: 'flex', alignItems: 'center', gap: '10px', textDecoration: 'none' }}>
               <div style={{ width: 40, height: 40, borderRadius: '50%', background: '#9768E1', color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 600 }}>
                 {user?.name ? user.name.charAt(0).toUpperCase() : 'S'}
               </div>
               <span style={{ color: '#523C48' }}>{user?.name || 'Profile'}</span>
-            </Link>
+              </Link>
+            </div>
           </header>
         )}
 

@@ -2,7 +2,6 @@
 const express = require('express');
 const authMiddleware = require('../auth/auth.middleware');
 const assessmentService = require('../services/AssessmentService');
-const notificationService = require('../services/NotificationService');
 const { getUserAttributes } = require('../auth/cognito');
 /**
  * Helper function to get user email from Cognito profile
@@ -285,71 +284,7 @@ router.post('/', authMiddleware.authenticateToken, async (req, res) => {
 
         const result = await assessmentService.createAssessment(assessmentData, createdBy);
         
-        // Send notifications if assessment is published
-        // NOTE: Notifications are sent but not stored in DB as per requirement
-        if (assessmentData.isPublished && result) {
-            try {
-                // Use dynamic domain detection - start with creator's domain
-                const createdByDomain = (createdBy && createdBy.includes('@')) ? createdBy.split('@')[1] : undefined;
-                let studentEmails: string[] = [];
-
-                // Get target students based on departments across all domains
-                if (assessmentData.targetDepartments && assessmentData.targetDepartments.length > 0) {
-                    // Get students by department without assuming a single domain
-                    for (const dept of assessmentData.targetDepartments) {
-                        // For each department, we might have students from different domains
-                        // So we need to get students from all possible domains
-                        try {
-                            // First, get students from the creator's domain as a starting point (if domain is available)
-                            if (createdByDomain) {
-                                const deptStudents = await notificationService.getStudentsByDepartment(createdByDomain, dept);
-                                studentEmails.push(...deptStudents);
-                            }
-                            
-                            // TODO: In a more advanced implementation, we would dynamically discover
-                            // all domains that have students in this department, but for now we
-                            // start with the creator's domain which should cover most cases
-                        } catch (domainError) {
-                            console.log(`Could not get students for department ${dept} in creator domain:`, domainError.message);
-                        }
-                    }
-                }
-
-                // If no target departments specified or no students found, get all students across domains
-                if (!studentEmails.length && createdByDomain) {
-                    try {
-                        // Get students from the creator's domain as a fallback
-                        studentEmails = await notificationService.getStudentsByDomain(createdByDomain);
-                    } catch (domainError) {
-                        console.log('Could not get students from creator domain:', domainError.message);
-                    }
-                }
-
-                // Remove duplicates
-                studentEmails = [...new Set(studentEmails)];
-
-                if (studentEmails.length) {
-                    const priority = assessmentData.scheduling?.startDate ? 'medium' : 'medium';
-                    await notificationService.createNotificationsForStudents(
-                        studentEmails,
-                        'assessment_published',
-                        `New Assessment: ${assessmentData.title}`,
-                        assessmentData.scheduling?.startDate 
-                            ? `A new assessment "${assessmentData.title}" has been published and is scheduled.`
-                            : `A new assessment "${assessmentData.title}" has been published.`,
-                        `/student/assessments/${result.assessmentId || result.assessmentId}`,
-                        priority,
-                        { assessmentId: result.assessmentId || result.assessmentId }
-                    );
-                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment (notifications not stored in DB)`);
-                } else {
-                    console.log('No students found to notify for published assessment');
-                }
-            } catch (notifError) {
-                console.error('Error sending notifications:', notifError);
-                // Don't fail the request if notifications fail
-            }
-        }
+        // Backend notifications disabled: frontend handles assessment_published notifications
         
         res.status(201).json({
             success: true,
@@ -402,72 +337,7 @@ router.put('/:id', authMiddleware.authenticateToken, async (req, res) => {
 
         const result = await assessmentService.updateAssessment(id, assessmentData, updatedBy);
         
-        // Send notifications if assessment is being published
-        // NOTE: Notifications are sent but not stored in DB as per requirement
-        if (isBeingPublished && result) {
-            try {
-                // Use dynamic domain detection - start with updater's domain
-                const updatedByDomain = (updatedBy && updatedBy.includes('@')) ? updatedBy.split('@')[1] : undefined;
-                let studentEmails: string[] = [];
-
-                // Get target students based on departments across all domains
-                const targetDepts = assessmentData.targetDepartments || result.target?.departments || [];
-                if (targetDepts.length > 0) {
-                    // Get students by department without assuming a single domain
-                    for (const dept of targetDepts) {
-                        // For each department, we might have students from different domains
-                        // So we need to get students from all possible domains
-                        try {
-                            // First, get students from the updater's domain as a starting point (if domain is available)
-                            if (updatedByDomain) {
-                                const deptStudents = await notificationService.getStudentsByDepartment(updatedByDomain, dept);
-                                studentEmails.push(...deptStudents);
-                            }
-                            
-                            // TODO: In a more advanced implementation, we would dynamically discover
-                            // all domains that have students in this department, but for now we
-                            // start with the updater's domain which should cover most cases
-                        } catch (domainError) {
-                            console.log(`Could not get students for department ${dept} in updater domain:`, domainError.message);
-                        }
-                    }
-                }
-
-                // If no target departments specified or no students found, get all students across domains
-                if (!studentEmails.length && updatedByDomain) {
-                    try {
-                        // Get students from the updater's domain as a fallback
-                        studentEmails = await notificationService.getStudentsByDomain(updatedByDomain);
-                    } catch (domainError) {
-                        console.log('Could not get students from updater domain:', domainError.message);
-                    }
-                }
-
-                // Remove duplicates
-                studentEmails = [...new Set(studentEmails)];
-
-                if (studentEmails.length) {
-                    const priority = (assessmentData.scheduling?.startDate || result.scheduling?.startDate) ? 'medium' : 'medium';
-                    await notificationService.createNotificationsForStudents(
-                        studentEmails,
-                        'assessment_published',
-                        `New Assessment: ${result.title || assessmentData.title}`,
-                        (assessmentData.scheduling?.startDate || result.scheduling?.startDate)
-                            ? `A new assessment "${result.title || assessmentData.title}" has been published and is scheduled.`
-                            : `A new assessment "${result.title || assessmentData.title}" has been published.`,
-                        `/student/assessments/${id}`,
-                        priority,
-                        { assessmentId: id }
-                    );
-                    console.log(`Sent notifications to ${studentEmails.length} students for published assessment (notifications not stored in DB)`);
-                } else {
-                    console.log('No students found to notify for published assessment update');
-                }
-            } catch (notifError) {
-                console.error('Error sending notifications:', notifError);
-                // Don't fail the request if notifications fail
-            }
-        }
+        // Backend notifications disabled: frontend handles assessment_published notifications
         
         res.status(200).json({
             success: true,

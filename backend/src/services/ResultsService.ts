@@ -5,7 +5,6 @@ const dynamodb = new AWS.DynamoDB.DocumentClient({
     region: process.env.AWS_REGION
 });
 
-const notificationService = require('./NotificationService');
 
 class ResultsService {
     private resultsTableName: string;
@@ -129,23 +128,6 @@ class ResultsService {
             console.log('✅ RESULT SAVED SUCCESSFULLY!');
             console.log('Table:', this.resultsTableName);
             console.log('========================================');
-            // After saving result, create a high-priority result_published notification
-            try {
-                const notificationLink = `/student/results/${encodeURIComponent(SK)}`;
-                await notificationService.createNotificationForUser(
-                    email,
-                    email,
-                    'result_published',
-                    `Results Published: ${assessmentId}`,
-                    `Your results for assessment "${assessmentId}" are now available.`,
-                    notificationLink,
-                    'high',
-                    { assessmentId }
-                );
-                console.log('Result published notification created for', email, 'assessment', assessmentId);
-            } catch (notifError) {
-                console.error('Error creating result_published notification:', notifError);
-            }
 
             return resultItem;
         } catch (error: any) {

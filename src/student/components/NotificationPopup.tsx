@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { X, AlertCircle, CheckCircle, Megaphone } from 'lucide-react';
+import { X, AlertCircle, CheckCircle, Megaphone, Clock } from 'lucide-react';
 import type { Notification } from '../../services/notification.service';
 
 interface NotificationPopupProps {
@@ -12,12 +12,12 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onC
     const navigate = useNavigate();
     const [isVisible, setIsVisible] = useState(true);
 
-    // Auto-hide after 4 seconds
+    // Auto-hide after 3 seconds
     useEffect(() => {
         const timer = setTimeout(() => {
             setIsVisible(false);
             setTimeout(onClose, 300); // Wait for fade out animation
-        }, 4000);
+        }, 3000);
 
         return () => clearTimeout(timer);
     }, [onClose]);
@@ -59,6 +59,8 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onC
                 return <AlertCircle size={20} color={getPriorityStyles().iconColor} />;
             case 'result_published':
                 return <CheckCircle size={20} color={getPriorityStyles().iconColor} />;
+            case 'reminder':
+                return <Clock size={20} color={getPriorityStyles().iconColor} />;
 
             case 'announcement':
                 return <Megaphone size={20} color={getPriorityStyles().iconColor} />;
@@ -80,7 +82,7 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onC
         <div
             style={{
                 position: 'fixed',
-                top: '20px',
+                bottom: '20px',
                 right: '20px',
                 width: '350px',
                 maxWidth: '90vw',
@@ -91,7 +93,7 @@ const NotificationPopup: React.FC<NotificationPopupProps> = ({ notification, onC
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
                 zIndex: 10000,
                 opacity: isVisible ? 1 : 0,
-                transform: isVisible ? 'translateX(0)' : 'translateX(400px)',
+                transform: isVisible ? 'translateY(0)' : 'translateY(100px)',
                 transition: 'all 0.3s ease',
                 cursor: notification.link ? 'pointer' : 'default'
             }}

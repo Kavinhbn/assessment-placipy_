@@ -2,9 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { useUser } from '../../contexts/UserContext';
 import StudentAssessmentService from '../../services/student.assessment.service';
 import ResultsService from '../../services/results.service';
+import { useNotifications } from '../../contexts/useNotifications';
+import { isToday, formatTimeHM } from '../../student/utils/timeUtils';
 
 const DashboardHome: React.FC = () => {
   const { user } = useUser();
+  const { addNotification } = useNotifications();
   const [activeAssessmentsCount, setActiveAssessmentsCount] = useState(0);
   const [completedAssessmentsCount, setCompletedAssessmentsCount] = useState(0);
   const [averageScore, setAverageScore] = useState(0);
@@ -45,6 +48,36 @@ const DashboardHome: React.FC = () => {
         }).length;
         
         setActiveAssessmentsCount(activeCount);
+
+        // Frontend notifications: Today assessments and upcoming reminders
+        try {
+          const sessionId = localStorage.getItem('notif_session_id') || String(Date.now());
+          localStorage.setItem('notif_session_id', sessionId);
+          const upcoming: Array<{ assessmentId: string; scheduledAt: string }> = [];
+          const items: any[] = assessmentsResponse.data || [];
+          items.forEach((a) => {
+            const start = a?.scheduling?.startDate || a?.createdAt;
+            const aid = a?.assessmentId || a?.id;
+            if (!aid || !start) return;
+            if (a.status === 'ACTIVE' && isToday(start)) {
+              const flagKey = `notif_today_${aid}_${sessionId}`;
+              if (!localStorage.getItem(flagKey)) {
+                localStorage.setItem(flagKey, '1');
+                addNotification({
+                  type: 'assessment_published',
+                  title: 'New Assessment Today',
+                  message: `Starts at ${formatTimeHM(start)}`,
+                  link: `/student/assessments`,
+                  priority: 'medium'
+                });
+              }
+            }
+            upcoming.push({ assessmentId: aid, scheduledAt: start });
+          });
+          localStorage.setItem('student_upcoming_assessments', JSON.stringify(upcoming));
+        } catch (e) {
+          console.error('Assessment notification logic failed', e);
+        }
         
         // Fetch dashboard statistics (completed tests, average score, recent assessments, performance)
         try {
@@ -88,6 +121,31 @@ const DashboardHome: React.FC = () => {
             } else {
               setPerformanceData([]);
             }
+
+            // PTO announcements -> local notifications
+            try {
+              const announcements = (statsResponse.data as any).announcements || [];
+              if (Array.isArray(announcements)) {
+                const seenKey = 'student_announcements_seen';
+                const seenIds = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
+                announcements.forEach((ann: any) => {
+                  const id = String(ann.id || ann.SK || `${ann.title}-${ann.createdAt || ''}`);
+                  if (!seenIds.has(id)) {
+                    addNotification({
+                      type: 'announcement',
+                      title: ann.title || 'Announcement',
+                      message: ann.message || ann.content || '',
+                      link: '/student/notifications',
+                      priority: 'low'
+                    });
+                    seenIds.add(id);
+                  }
+                });
+                localStorage.setItem(seenKey, JSON.stringify(Array.from(seenIds)));
+              }
+            } catch (_) {
+              /* no announcements available */
+            }
           }
         } catch (statsError: any) {
           console.log('Error fetching dashboard stats:', statsError);
@@ -96,6 +154,32 @@ const DashboardHome: React.FC = () => {
           setAverageScore(0);
           setRecentAssessments([]);
           setPerformanceData([]);
+        }
+
+        // Results published notification
+        try {
+          const res = await ResultsService.getStudentResults();
+          const list: any[] = res?.data || res || [];
+          const seenKey = 'notif_results_seen_ids';
+          const seen = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
+          list.forEach((r) => {
+            const aid = r?.assessmentId;
+            if (!aid) return;
+            const published = r?.isResultPublished ?? true;
+            if (published && !seen.has(aid)) {
+              addNotification({
+                type: 'result_published',
+                title: 'Your results are available',
+                message: 'View your latest assessment results.',
+                link: `/student/results`,
+                priority: 'medium'
+              });
+              seen.add(aid);
+            }
+          });
+          localStorage.setItem(seenKey, JSON.stringify(Array.from(seen)));
+        } catch (e) {
+          console.error('Result notification logic failed', e);
         }
         
         setError(null);
@@ -117,7 +201,7 @@ const DashboardHome: React.FC = () => {
     // Refresh data every 30 seconds for real-time updates
     const interval = setInterval(fetchData, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [addNotification]);
 
   return (
     <div className="dashboard-home">

@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
-import NotificationService from '../services/notification.service';
 import type { Notification } from '../services/notification.service';
 
 interface NotificationContextType {
@@ -12,9 +11,11 @@ interface NotificationContextType {
     lastNotificationId: string | null;
     // Add method to add temporary notifications
     addTemporaryNotification: (notification: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => void;
+    addNotification: (notification: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => void;
 }
 
 const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+export { NotificationContext };
 
 interface NotificationProviderProps {
     children: React.ReactNode;
@@ -26,8 +27,34 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     const [loading, setLoading] = useState(true);
     const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
     const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
+    const reminderIntervalRef = useRef<NodeJS.Timeout | null>(null);
     const popupShownRef = useRef<Set<string>>(new Set());
     const tempNotificationsRef = useRef<Notification[]>([]);
+    const sessionIdRef = useRef<string>('');
+
+    const STORAGE_NOTIFS = 'student_local_notifications';
+    const STORAGE_UPCOMING = 'student_upcoming_assessments';
+
+    const loadStoredNotifications = (): Notification[] => {
+        try {
+            const raw = localStorage.getItem(STORAGE_NOTIFS);
+            if (!raw) return [];
+            const arr = JSON.parse(raw);
+            if (!Array.isArray(arr)) return [];
+            return arr;
+        } catch (e) {
+            console.error('Failed to parse local notifications', e);
+            return [];
+        }
+    };
+
+    const saveStoredNotifications = (arr: Notification[]) => {
+        try {
+            localStorage.setItem(STORAGE_NOTIFS, JSON.stringify(arr.slice(0, 200)));
+        } catch (e) {
+            console.error('Failed to save local notifications', e);
+        }
+    };
 
     // Add temporary notification (not stored in DB)
     const addTemporaryNotification = useCallback((notificationData: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => {
@@ -38,25 +65,24 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
             SK: `TEMP_NOTIF#${Date.now()}`,
             PK: 'TEMP'
         };
-        
-        // Add to temporary notifications array
-        tempNotificationsRef.current = [tempNotification, ...tempNotificationsRef.current].slice(0, 50); // Keep only last 50
-        
-        // Update state to trigger re-render
-        setNotifications(prev => [tempNotification, ...prev.slice(0, 49)]); // Keep only last 50
-        setUnreadCount(prev => prev + 1);
-        
-        // Trigger popup event
+        const current = [tempNotification, ...loadStoredNotifications()];
+        saveStoredNotifications(current);
+        tempNotificationsRef.current = current;
+        setNotifications(current);
+        setUnreadCount(current.filter(n => !n.isRead).length);
         window.dispatchEvent(new CustomEvent('newNotification', { detail: tempNotification }));
-        
         return tempNotification;
     }, []);
+
+    const addNotification = useCallback((notificationData: Omit<Notification, 'createdAt' | 'isRead' | 'SK' | 'PK'>) => {
+        return addTemporaryNotification(notificationData);
+    }, [addTemporaryNotification]);
 
     // Fetch notifications (will return empty since we're not storing in DB)
     const fetchNotifications = useCallback(async () => {
         try {
             // Since notifications are not stored in DB, we'll use temporary notifications
-            const tempNotifications = tempNotificationsRef.current;
+            const tempNotifications = loadStoredNotifications();
             
             // Sort by createdAt descending (newest first)
             const sortedNotifications = [...tempNotifications].sort((a, b) => {
@@ -104,24 +130,16 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark notification as read
     const markAsRead = useCallback(async (notificationId: string) => {
         try {
-            // Update temporary notifications
-            tempNotificationsRef.current = tempNotificationsRef.current.map(notif => {
+            const updated = loadStoredNotifications().map(notif => {
                 if (notif.SK === notificationId) {
                     return { ...notif, isRead: true };
                 }
                 return notif;
             });
-            
-            // Update state
-            setNotifications(prev => 
-                prev.map(notif => {
-                    if (notif.SK === notificationId) {
-                        return { ...notif, isRead: true };
-                    }
-                    return notif;
-                })
-            );
-            setUnreadCount(prev => Math.max(0, prev - 1));
+            saveStoredNotifications(updated);
+            tempNotificationsRef.current = updated;
+            setNotifications(updated);
+            setUnreadCount(updated.filter(n => !n.isRead).length);
         } catch (error) {
             console.error('Error marking notification as read:', error);
             throw error;
@@ -131,11 +149,10 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     // Mark all notifications as read
     const markAllAsRead = useCallback(async () => {
         try {
-            // Update temporary notifications
-            tempNotificationsRef.current = tempNotificationsRef.current.map(notif => ({ ...notif, isRead: true }));
-            
-            // Update state
-            setNotifications(prev => prev.map(notif => ({ ...notif, isRead: true })));
+            const updated = loadStoredNotifications().map(notif => ({ ...notif, isRead: true }));
+            saveStoredNotifications(updated);
+            tempNotificationsRef.current = updated;
+            setNotifications(updated);
             setUnreadCount(0);
         } catch (error) {
             console.error('Error marking all notifications as read:', error);
@@ -143,8 +160,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         }
     }, []);
 
-    // Initial fetch
+    // Initialize session and load notifications
     useEffect(() => {
+        let sid = localStorage.getItem('notif_session_id');
+        if (!sid) {
+            sid = String(Date.now());
+            localStorage.setItem('notif_session_id', sid);
+        }
+        sessionIdRef.current = sid;
         fetchNotifications();
     }, []);
 
@@ -161,6 +184,51 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
         };
     }, [fetchNotifications]);
 
+    // Reminder checking every 1 minute
+    useEffect(() => {
+        const makeKey = (assessmentId: string, minutes: number) => `notif_reminder_${assessmentId}_${minutes}_${sessionIdRef.current}`;
+        const shouldFire = (key: string) => !localStorage.getItem(key);
+        const markFired = (key: string) => localStorage.setItem(key, '1');
+
+        const checkReminders = () => {
+            try {
+                const raw = localStorage.getItem(STORAGE_UPCOMING);
+                if (!raw) return;
+                const arr = JSON.parse(raw) as Array<{ assessmentId: string; scheduledAt: string }>;
+                if (!Array.isArray(arr)) return;
+                const now = Date.now();
+                arr.forEach(item => {
+                    if (!item || !item.assessmentId || !item.scheduledAt) return;
+                    const target = new Date(item.scheduledAt).getTime();
+                    const diffMin = Math.floor((target - now) / 60000);
+                    [10, 5, 1].forEach(m => {
+                        if (diffMin === m) {
+                            const key = makeKey(item.assessmentId, m);
+                            if (shouldFire(key)) {
+                                markFired(key);
+                                addNotification({
+                                    type: 'reminder',
+                                    title: m === 10 ? 'Test starts in 10 minutes' : m === 5 ? 'Test starts in 5 minutes' : 'Test starts in 1 minute',
+                                    message: 'Get ready to begin your assessment.',
+                                    link: `/student/assessments`,
+                                    priority: 'high'
+                                });
+                            }
+                        }
+                    });
+                });
+            } catch (e) {
+                console.error('Reminder check failed', e);
+            }
+        };
+
+        checkReminders();
+        reminderIntervalRef.current = setInterval(checkReminders, 60000);
+        return () => {
+            if (reminderIntervalRef.current) clearInterval(reminderIntervalRef.current);
+        };
+    }, [addNotification]);
+
     return (
         <NotificationContext.Provider
             value={{
@@ -171,7 +239,8 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                 markAsRead,
                 markAllAsRead,
                 lastNotificationId,
-                addTemporaryNotification
+                addTemporaryNotification,
+                addNotification
             }}
         >
             {children}
@@ -179,10 +248,3 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
     );
 };
 
-export function useNotifications() {
-    const context = useContext(NotificationContext);
-    if (context === undefined) {
-        throw new Error('useNotifications must be used within a NotificationProvider');
-    }
-    return context;
-}
