@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import './AssessmentTaking.css';
 import judge0Service, { type SubmissionResult } from '../../services/judge0.service';
@@ -84,7 +84,6 @@ const AssessmentTaking: React.FC = () => {
   // Get assessmentId from URL params
   const { assessmentId } = useParams<{ assessmentId: string }>();
   const navigate = useNavigate();
-  const location = useLocation();
   const { user } = useUser();
 
   // State for assessment data
@@ -98,7 +97,6 @@ const AssessmentTaking: React.FC = () => {
   const [focusLossCount, setFocusLossCount] = useState<number>(0);
   // State for focus loss warnings
   // Removed focus loss warning state variables as per requirement  const [focusLossWarningMessage, setFocusLossWarningMessage] = useState<string>('');
-  const [focusLossWarningType, setFocusLossWarningType] = useState<'first' | 'second' | 'third'>('first');
   
   // Updated handleTabChange function (no longer tracks tab switches)
   const handleTabChange = (newTab: 'mcq' | 'coding') => {
@@ -122,17 +120,17 @@ const AssessmentTaking: React.FC = () => {
   const [code, setCode] = useState<{ [key: string]: { [key: string]: string } }>({});
   const [executionResult, setExecutionResult] = useState<{ [key: string]: SubmissionResult }>({});
   const [testCaseResults, setTestCaseResults] = useState<{ [key: string]: { passed: boolean, actualOutput: string, expectedOutput: string, input: string }[] }>({});
-  const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false);
+  // // const [allTestCasesPassed, setAllTestCasesPassed] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
   // State to track which coding challenges have been successfully executed without errors
   const [successfulExecutions, setSuccessfulExecutions] = useState<Record<string, boolean>>({});
-  const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Disable auto-run by default
+  // const [isAutoRunEnabled, setIsAutoRunEnabled] = useState<boolean>(false); // Commenting out unused state
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [customInput, setCustomInput] = useState<string>('');
 
   // State for assessment completion
-  const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false);
+  // // const [isAssessmentCompleted, setIsAssessmentCompleted] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
   const [submitted, setSubmitted] = useState(false);
-  const [mcqResults, setMcqResults] = useState<any>(null);
+  const [mcqResults, setMcqResults] = useState<Record<string, any> | null>(null);
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
  // State for showing submit button after 20 minutes (keeping for compatibility)
 const [showSubmitButton, setShowSubmitButton] = useState<boolean>(false);
@@ -169,7 +167,7 @@ useEffect(() => {
   }, []);
 
   // State for showing test cases dropdown
-  const [showTestCases, setShowTestCases] = useState<boolean>(false);
+  // // const [showTestCases, setShowTestCases] = useState<boolean>(false); // Commenting out unused state // Commenting out unused state
 
   // Refs
   const timerRef = useRef<NodeJS.Timeout | null>(null);
@@ -268,7 +266,7 @@ useEffect(() => {
       console.log('=== End Focus Event ===');
     };
 
-    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+    const handleBeforeUnload = (_: BeforeUnloadEvent) => {
       console.log('=== Before Unload Event ===');
       // Mark that we're submitting to prevent focus loss counting
       isSubmittingRef.current = true;
@@ -321,7 +319,7 @@ useEffect(() => {
       console.log('Finished cleaning up event listeners');
       console.log('=== Focus Loss Detection Effect Unmounted ===');
     };
-  }, [assessmentData, submitted]);
+  }, [assessmentData, submitted, handleFocusLoss]);
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
@@ -389,7 +387,7 @@ useEffect(() => {
       }
 
       // Calculate MCQ answers in exact format
-      const mcqAnswersArray: any[] = [];
+      const mcqAnswersArray: Array<{ questionId: string; selected: string[]; isCorrect: boolean }> = [];      
       let mcqScore = 0;
       let mcqMaxScore = 0;
       let mcqCorrect = 0;
@@ -435,7 +433,7 @@ useEffect(() => {
       });
 
       // Calculate coding answers (simplified - assume all coding questions are attempted if code exists)
-      const codingAnswersArray: any[] = [];
+      const codingAnswersArray: Array<{ questionId: string; selected: string[]; isCorrect: boolean }> = [];      
       let codingScore = 0;
       let codingMaxScore = 0;
       let codingCorrect = 0;
@@ -521,7 +519,7 @@ useEffect(() => {
       setMcqResults(mcqAnswersArray.reduce((acc, ans) => {
         acc[ans.questionId] = ans;
         return acc;
-      }, {} as any));
+      }, {} as Record<string, any>));
       setSubmitted(true);
 
       console.log('Submitting assessment result...', resultData);
@@ -559,7 +557,7 @@ useEffect(() => {
       if (window.parent) {
         window.parent.postMessage({ type: 'ASSESSMENT_COMPLETED' }, '*');
       }
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error('Error saving assessment result:', error);
       console.error('Error details:', {
         message: error.message,
@@ -598,7 +596,7 @@ useEffect(() => {
       console.error('Final error message:', errorMessage);
       alert(errorMessage);
     }
-  }, [assessmentData, assessmentId, code, codingChallenges, isSubmitting, mcqAnswers, navigate, selectedLanguage, submitted, successfulExecutions, timeLeft, user]);
+  }, [assessmentData, assessmentId, code, codingChallenges, isSubmitting, mcqAnswers, mcqQuestions, navigate, selectedLanguage, submitted, successfulExecutions, timeLeft, user]);
 
   // Handle focus loss event - removed warning flow
   const handleFocusLoss = useCallback(() => {
@@ -625,7 +623,7 @@ useEffect(() => {
     setFocusLossCount(newCount);
     
     console.log('=== End Focus Loss Event ===');
-  }, [focusLossCount, handleSubmit]);
+  }, [focusLossCount]);
   // Get current challenge safely
   const currentChallenge = codingChallenges[currentCodingIndex];
 
@@ -701,7 +699,7 @@ try {
 }
 `;
 
-    } catch (error) {
+    } catch (_error) {
       // If all else fails, provide a safe fallback
       return `
 console.log("React/JSX code detected:");
@@ -840,7 +838,7 @@ console.log("In a browser environment, this would render as HTML");
     } finally {
       setIsLoading(false);
     }
-  }, [currentChallenge, code, selectedLanguage, customInput]);
+  }, [currentChallenge, code, selectedLanguage, customInput, runTestCases]);
 
   // Utility function for delay
   const delay = (ms: number) => new Promise(res => setTimeout(res, ms));
