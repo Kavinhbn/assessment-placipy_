@@ -759,15 +759,8 @@ const StudentManagement: React.FC = () => {
                       >
                         {/* Edit Button */}
                         <button
+                          className="pts-btn-secondary"
                           onClick={() => openEditModal(student)}
-                          style={{
-                            padding: '6px 10px',
-                            background: '#cce5ff',
-                            color: '#004085',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer'
-                          }}
                           title="Edit student"
                         >
                           Edit
@@ -775,15 +768,8 @@ const StudentManagement: React.FC = () => {
 
                         {/* Delete Button */}
                         <button
+                          className="pts-btn-danger"
                           onClick={() => handleDeleteStudent(student.email)}
-                          style={{
-                            padding: '6px 10px',
-                            background: '#f8d7da',
-                            color: '#721c24',
-                            border: 'none',
-                            borderRadius: '8px',
-                            cursor: 'pointer'
-                          }}
                           title="Delete student"
                         >
                           Delete

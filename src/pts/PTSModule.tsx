@@ -145,11 +145,11 @@ const PTSModule: React.FC = () => {
               onMouseLeave={(e) => e.currentTarget.style.opacity = '1'}
               title="Go to Profile Settings"
             >
-              <img
-                src="https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=40&h=40&fit=crop&crop=face"
-                alt="Profile"
-                className="pts-user-avatar"
-              />
+              <div
+                className="pts-user-avatar-first-letter"
+              >
+                {user?.name?.charAt(0) || 'U'}
+              </div>
               {userInfo}
             </div>
           </div>

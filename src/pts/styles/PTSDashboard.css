@@ -289,7 +289,7 @@ li:nth-child(6) .pts-sidebar-link:before {
 
 @media (max-width: 768px) {
   .pts-dashboard.sidebar-open .pts-header {
-    padding-left: 30px;
+    padding-left: 50px;
   }
 }
 
@@ -332,6 +332,21 @@ li:nth-child(6) .pts-sidebar-link:before {
   height: 40px;
   border-radius: 50%;
   border: 2px solid #9768E1;
+}
+
+.pts-user-avatar-first-letter {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #9768E1;
+  background: linear-gradient(135deg, #9768E1 0%, #7B4FC4 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: bold;
+  color: white;
+  text-transform: uppercase;
 }
 
 .pts-user-details .name {
@@ -678,7 +693,7 @@ li:nth-child(6) .pts-sidebar-link:before {
   border-radius: 16px;
   box-shadow: 0 8px 32px rgba(151, 104, 225, 0.12);
   border: 1px solid rgba(151, 104, 225, 0.15);
-  overflow: hidden;
+  overflow: visible;
   transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   position: relative;
 }
@@ -742,16 +757,28 @@ li:nth-child(6) .pts-sidebar-link:before {
   transition: all 0.3s ease;
   vertical-align: middle;
   height: auto;
+  position: relative;
+  overflow: visible;
+}
+
+.data-table td button {
+  position: relative;
+  z-index: 10;
 }
 
 .data-table td:last-child {
   border-right: none;
 }
 
+table tr {
+  position: relative;
+  z-index: 1;
+}
+
 .data-table tbody tr {
   transition: all 0.3s ease;
   position: relative;
-  overflow: hidden;
+  overflow: visible;
 }
 
 .data-table tbody tr:nth-child(even) {
@@ -771,22 +798,42 @@ li:nth-child(6) .pts-sidebar-link:before {
 
 /* Action Button Styles in Table */
 .pts-btn-danger {
-  background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
-  color: white;
-  border: 2px solid transparent;
-  padding: 6px 12px;
+  padding: 6px 10px;
+  background: #f8d7da;
+  color: #721c24;
+  border: none;
   border-radius: 8px;
   cursor: pointer;
-  font-weight: 500;
-  transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   font-size: 0.85rem;
-  box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
 }
 
 .pts-btn-danger:hover {
-  background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
-  transform: translateY(-1px);
+  background-color: #dc3545 !important;
+  color: #fff !important;
+  transform: scale(1.05);
+}
+
+.pts-btn-secondary {
+  padding: 6px 10px;
+  background: #cce5ff;
+  color: #004085;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  transition: all 0.2s ease;
+  position: relative;
+  z-index: 5;
+  pointer-events: auto;
+}
+
+.pts-btn-secondary:hover {
+  background: #b8d7f0;
+  transform: scale(1.05);
 }
 
 .pts-section-card:hover {
@@ -1267,10 +1314,6 @@ li:nth-child(6) .pts-sidebar-link:before {
 
 /* Responsive Design */
 @media (max-width: 768px) {
-  .pts-hamburger-menu {
-    /* Already displayed via !important rule above */
-  }
-
   .pts-sidebar {
     position: fixed;
     top: 0;
