@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import AssessmentService from "../services/assessment.service";
 import { useUser } from '../contexts/UserContext';
+import { FileText, Plus, Upload, Download, Trash2, List, Code, Terminal, X } from 'lucide-react';
 
 interface TestCase {
   id: string;
@@ -1022,16 +1023,17 @@ const AssessmentCreation: React.FC = () => {
       `}</style>
 
       <div className="pts-section-card">
-        {/* Toggle button for showing/hiding assessments */}
+        {/* Assessment view toggle buttons - similar to student stats tabs */}
         <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '8px', marginBottom: '20px' }}>
           <button
-            className="pts-btn-primary"
+            className={showAssessments ? "pts-btn-primary" : "pts-btn-secondary"}
             onClick={toggleAssessments}
           >
-            {showAssessments ? 'Hide Assessments' : 'Show Assessments'}
+            <FileText size={18} style={{ marginRight: '8px' }} />
+            Show Assessments
           </button>
           <button
-            className="pts-btn-secondary"
+            className={!showAssessments ? "pts-btn-primary" : "pts-btn-secondary"}
             onClick={() => {
               setShowAssessments(false);
               // Reset form when switching to create mode
@@ -1091,6 +1093,7 @@ const AssessmentCreation: React.FC = () => {
               });
             }}
           >
+            <Plus size={16.5} style={{ marginRight: '8px'  }} />
             Create Assessment
           </button>
         </div>
@@ -1152,7 +1155,8 @@ const AssessmentCreation: React.FC = () => {
                               onClick={() => deleteAssessment(assessment.assessmentId)}
                               style={{ padding: '4px 8px', fontSize: '0.8rem' }}
                             >
-                              Delete
+                              <Trash2 size={19} style={{ marginRight: '4px', display: 'inline' }} />
+                             
                             </button>
                           </td>
                         </tr>
@@ -1173,12 +1177,14 @@ const AssessmentCreation: React.FC = () => {
               onClick={triggerFileInput}
               disabled={importLoading}
             >
+              <Upload size={18} style={{ marginRight: '8px' }} />
               Import CSV
             </button>
             <button
               className="pts-btn-secondary"
               onClick={exportToCSV}
             >
+              <Download size={18} style={{ marginRight: '8px' }} />
               Export CSV
             </button>
           </div>
@@ -1548,7 +1554,7 @@ const AssessmentCreation: React.FC = () => {
 
             {assessmentData.referenceMaterials.length === 0 && (
               <div className="pts-empty-state">
-                <div className="pts-empty-state-icon">📚</div>
+                <div className="pts-empty-state-icon"></div>
                 <div className="pts-empty-state-text">No reference materials added yet. Click "Add Reference Material" to attach PDFs, videos, or links.</div>
               </div>
             )}
@@ -1653,6 +1659,7 @@ const AssessmentCreation: React.FC = () => {
                       setShowProgrammingForm(false);
                     }}
                   >
+                    <List size={18} style={{ marginRight: '8px' }} />
                     Add MCQ Question
                   </button>
                 )}
@@ -1665,6 +1672,7 @@ const AssessmentCreation: React.FC = () => {
                       setShowMcqForm(false);
                     }}
                   >
+                    <Code size={18} style={{ marginRight: '8px' }} />
                     Add Programming Question
                   </button>
                 )}
@@ -1769,6 +1777,7 @@ const AssessmentCreation: React.FC = () => {
                                 }}
                                 style={{ padding: "5px 10px", fontSize: "0.9rem" }}
                               >
+                                <Terminal size={16} style={{ marginRight: '6px' }} />
                                 Add Test Case
                               </button>
                             </div>
@@ -1800,6 +1809,7 @@ const AssessmentCreation: React.FC = () => {
                                         onClick={() => removeTestCase(question.id, testCase.id)}
                                         style={{ padding: "3px 8px", fontSize: "0.8rem" }}
                                       >
+                                        <X size={14} style={{ marginRight: '4px', display: 'inline' }} />
                                         Remove
                                       </button>
                                     </div>
@@ -1820,6 +1830,7 @@ const AssessmentCreation: React.FC = () => {
                         onClick={() => removeQuestion(question.id)}
                         style={{ marginLeft: "15px" }}
                       >
+                        <X size={16} style={{ marginRight: '6px', display: 'inline' }} />
                         Remove
                       </button>
                     </div>
@@ -1830,7 +1841,7 @@ const AssessmentCreation: React.FC = () => {
 
             {assessmentData.questions.length === 0 && assessmentData.category.length > 0 && (
               <div className="pts-empty-state">
-                <div className="pts-empty-state-icon">❓</div>
+                <div className="pts-empty-state-icon"></div>
                 <div className="pts-empty-state-text">No questions added yet. Start by adding MCQ or Programming questions to build your assessment.</div>
               </div>
             )}

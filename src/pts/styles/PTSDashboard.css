@@ -591,33 +591,40 @@ li:nth-child(6) .pts-sidebar-link:before {
   font-size: 1rem;
   letter-spacing: 0.2px;
   box-shadow: 0 4px 15px rgba(151, 104, 225, 0.3);
-}
-
-.pts-btn-primary:hover {
-  background: linear-gradient(135deg, #8a5dd1 0%, #6d42c0 100%);
-  border-color: white;
-  box-shadow: 0 6px 20px rgba(151, 104, 225, 0.5);
-  transform: translateY(-2px);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .pts-btn-primary::before {
   content: '';
   position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid white;
-  border-radius: 10px;
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
-  pointer-events: none;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: skewX(-25deg);
+  transition: none;
 }
 
 .pts-btn-primary:hover::before {
-  opacity: 1;
-  animation: borderAnimation 0.5s ease-in-out;
+  animation: shine 1.2s infinite;
 }
+
+.pts-btn-primary:hover {
+  background: linear-gradient(135deg, #8a5dd1 0%, #6d42c0 100%);
+  box-shadow: 0 6px 20px rgba(151, 104, 225, 0.5);
+  transform: translateY(-2px);
+}
+
+.pts-btn-primary svg {
+  margin-right: 8px;
+  flex-shrink: 0;
+  align-self: center;
+}
+
 
 .pts-btn-secondary {
   background: linear-gradient(135deg, #e9ecef 0%, #d1d5db 100%);
@@ -631,33 +638,43 @@ li:nth-child(6) .pts-sidebar-link:before {
   font-size: 1rem;
   letter-spacing: 0.2px;
   box-shadow: 0 4px 12px rgba(151, 104, 225, 0.1);
-}
-
-.pts-btn-secondary:hover {
-  background: linear-gradient(135deg, #d1d5db 0%, #b7b9c0 100%);
-  border-color: #9768E1;
-  box-shadow: 0 6px 18px rgba(151, 104, 225, 0.2);
-  transform: translateY(-2px);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
 }
 
 .pts-btn-secondary::before {
   content: '';
   position: absolute;
-  top: -2px;
-  left: -2px;
-  right: -2px;
-  bottom: -2px;
-  border: 2px solid #9768E1;
-  border-radius: 10px;
-  opacity: 0;
-  transition: opacity 0.3s ease-in-out;
-  pointer-events: none;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: skewX(-25deg);
+  transition: none;
 }
 
 .pts-btn-secondary:hover::before {
-  opacity: 1;
-  animation: borderAnimation 0.5s ease-in-out;
+  animation: shine 1.2s infinite;
 }
+
+.pts-btn-secondary:hover {
+  background: linear-gradient(135deg, #d1d5db 0%, #b7b9c0 100%);
+  box-shadow: 0 6px 18px rgba(151, 104, 225, 0.2);
+  transform: translateY(-2px);
+}
+
+.pts-btn-secondary svg {
+  margin-right: 8px;
+ 
+
+}
+
+
 
 @keyframes borderAnimation {
   0% {
@@ -671,6 +688,16 @@ li:nth-child(6) .pts-sidebar-link:before {
   100% {
     transform: scale(1);
     opacity: 1;
+  }
+}
+
+@keyframes shine {
+  0% {
+    left: -75%;
+  }
+
+  100% {
+    left: 125%;
   }
 }
 
@@ -809,12 +836,130 @@ table tr {
   position: relative;
   z-index: 5;
   pointer-events: auto;
+  overflow: hidden;
+}
+
+.pts-btn-danger::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -75%;
+  width: 50%;
+  height: 100%;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0) 0%, rgba(255, 255, 255, 0.3) 50%, rgba(255, 255, 255, 0) 100%);
+  transform: skewX(-25deg);
+  transition: none;
+}
+
+.pts-btn-danger:hover::before {
+  animation: shine 1.2s infinite;
 }
 
 .pts-btn-danger:hover {
   background-color: #dc3545 !important;
   color: #fff !important;
   transform: scale(1.05);
+}
+
+/* Icon button styles (matching PTO style) */
+.icon-btn {
+  width: 36px;
+  height: 36px;
+  min-width: 36px;
+  min-height: 36px;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 1000;
+  pointer-events: auto;
+  -webkit-tap-highlight-color: transparent;
+  touch-action: manipulation;
+  overflow: visible;
+  text-align: center;
+  line-height: 1;
+  background-clip: border-box;
+  -webkit-background-clip: border-box;
+  isolation: isolate;
+}
+
+/* Removed problematic shine effect - causing white overlay issues */
+
+.icon-btn:active {
+  transform: scale(0.95);
+}
+
+.icon-btn * {
+  pointer-events: none;
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+}
+
+.icon-btn svg {
+  width: 16px !important;
+  height: 16px !important;
+  pointer-events: none;
+  color: inherit !important;
+  fill: currentColor !important;
+  stroke: currentColor !important;
+  display: block !important;
+  min-width: 16px !important;
+  min-height: 16px !important;
+  isolation: isolate;
+  mix-blend-mode: normal;
+}
+
+.icon-btn:hover {
+  z-index: 1001 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 3px 10px rgba(151, 104, 225, 0.25);
+}
+
+.edit-btn {
+  background: #e0d6f0;
+  color: #9768E1 !important;
+  border: 1px solid #9768E1;
+  z-index: 10;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.edit-btn:hover {
+  background: #9768E1;
+  color: white !important;
+  border-color: #9768E1;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(151, 104, 225, 0.3);
+}
+
+.delete-btn {
+  background: #fee;
+  color: #f44 !important;
+  border: 1px solid #f44;
+  z-index: 10;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
+}
+
+.delete-btn:hover {
+  background: #f44;
+  color: white !important;
+  border-color: #f44;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(255, 68, 68, 0.3);
 }
 
 .pts-btn-secondary {

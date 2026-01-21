@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Search, Plus, Filter, X, Save, Upload } from 'lucide-react';
+import { FaEdit, FaTrash } from 'react-icons/fa';
 import { useUser } from '../contexts/UserContext';
 import * as XLSX from '@e965/xlsx';
 import {
@@ -617,13 +618,13 @@ const StudentManagement: React.FC = () => {
         <div>
           <table className="data-table" style={{ width: '100%', borderCollapse: 'collapse', tableLayout: 'fixed' }}>
             <thead>
-              <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #e9ecef' }}>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '25%' }}>Email</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Roll No</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '15%' }}>Name</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Department</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Phone</th>
-                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%' }}>Status</th>
+              <tr style={{ background: '#f8f9fa', borderBottom: '2px solid #999999' }}>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '25%', borderRight: '1px solid #999999' }}>Email</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%', borderRight: '1px solid #999999' }}>Roll No</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '15%', borderRight: '1px solid #999999' }}>Name</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%', borderRight: '1px solid #999999' }}>Department</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%', borderRight: '1px solid #999999' }}>Phone</th>
+                <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '12%', borderRight: '1px solid #999999' }}>Status</th>
                 <th style={{ padding: '12px', textAlign: 'left', color: '#523C48', width: '13%' }}>Actions</th>
               </tr>
             </thead>
@@ -645,7 +646,7 @@ const StudentManagement: React.FC = () => {
                 </tr>
               ) : (
                 filteredStudents.map(student => (
-                  <tr key={student.email} style={{ borderBottom: '1px solid #e9ecef', height: 'auto', minHeight: '50px', verticalAlign: 'middle' }}>
+                  <tr key={student.email} style={{ borderBottom: '1px solid #cccccc', height: 'auto', minHeight: '50px', verticalAlign: 'middle' }}>
                     <td style={{ 
                       padding: '10px 12px', 
                       color: '#A4878D', 
@@ -654,7 +655,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       {student.email}
                     </td>
@@ -666,7 +668,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       {student.rollNumber}
                     </td>
@@ -677,7 +680,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       {student.name}
                     </td>
@@ -688,7 +692,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       {student.department}
                     </td>
@@ -700,7 +705,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       {student.phone || '-'}
                     </td>
@@ -710,7 +716,8 @@ const StudentManagement: React.FC = () => {
                       zIndex: 1,
                       height: 'auto',
                       verticalAlign: 'middle',
-                      lineHeight: '1.4'
+                      lineHeight: '1.4',
+                      borderRight: '1px solid #999999'
                     }}>
                       <button
                         onClick={() => toggleStudentStatus(student.email)}
@@ -759,20 +766,20 @@ const StudentManagement: React.FC = () => {
                       >
                         {/* Edit Button */}
                         <button
-                          className="pts-btn-secondary"
+                          className="icon-btn edit-btn"
                           onClick={() => openEditModal(student)}
                           title="Edit student"
                         >
-                          Edit
+                          <FaEdit />
                         </button>
 
                         {/* Delete Button */}
                         <button
-                          className="pts-btn-danger"
+                          className="icon-btn delete-btn"
                           onClick={() => handleDeleteStudent(student.email)}
                           title="Delete student"
                         >
-                          Delete
+                          <FaTrash />
                         </button>
                       </div>
                     </td>
@@ -780,6 +787,11 @@ const StudentManagement: React.FC = () => {
                 ))
               )}
             </tbody>
+            <tfoot>
+              <tr>
+                <td colSpan={7} style={{ height: '2px', background: '#999999', padding: 0 }}></td>
+              </tr>
+            </tfoot>
           </table>
         </div>
       </div>
