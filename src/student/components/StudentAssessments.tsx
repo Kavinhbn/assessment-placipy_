@@ -157,6 +157,15 @@ const StudentAssessments: React.FC = () => {
     }
   }, [filteredAssessments]);
 
+  // Debug: Log assessment data to check scheduling
+  useEffect(() => {
+    if (filteredAssessments.length > 0) {
+      console.log('First assessment data:', filteredAssessments[0]);
+      console.log('First assessment scheduling:', filteredAssessments[0].scheduling);
+      console.log('First assessment end date:', filteredAssessments[0].scheduling?.endDate);
+    }
+  }, [filteredAssessments]);
+
   // Pagination logic
   const totalItems = filteredAssessments.length;
   const totalPages = Math.ceil(totalItems / PAGE_SIZE) || 1;

@@ -294,7 +294,9 @@ const DashboardHome: React.FC = () => {
       
 
       <div className="std_stats-grid">
+      <div className="std_stats-grid">
         {stats.map((stat, index) => (
+          <div className="std_stat-card" key={index}>
           <div className="std_stat-card" key={index}>
             <h3>{stat.title}</h3>
             <p className="stat-value">{stat.value}</p>
@@ -376,6 +378,7 @@ const DashboardHome: React.FC = () => {
                     fontWeight: 500
                   }}>
                     %{value}
+                    %{value}
                   </span>
                 ))}
               </div>
@@ -426,6 +429,7 @@ const DashboardHome: React.FC = () => {
                       {clamped > 0 && (
                         <div style={{
                           position: 'absolute',
+                          top: '-45px',
                           top: '-45px',
                           left: '50%',
                           transform: 'translateX(-50%)',
