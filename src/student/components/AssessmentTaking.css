@@ -309,7 +309,8 @@
   cursor: pointer;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
   z-index: 25;
-  color: #000000; /* Black color for SVG icons */
+  color: #000000;
+  /* Black color for SVG icons */
 }
 
 .st-sidebar-wrapper.closed .st-sidebar-header-content,
@@ -441,6 +442,30 @@
   font-size: 0.95rem;
 }
 
+.st-assessment-description {
+  margin: 20px 0;
+  padding: 16px;
+  background: transparent;
+  border: 1px solid #E5E7EB;
+  border-radius: 8px;
+}
+
+.st-question-label,
+.st-description-label {
+  font-weight: 600;
+  color: #111827;
+  margin-bottom: 8px;
+  display: block;
+  font-size: 1rem;
+}
+
+.st-question-content,
+.st-description-content {
+  color: #374151;
+  line-height: 1.6;
+  margin-bottom: 24px;
+}
+
 /* Examples & Test Cases */
 .st-examples,
 .st-test-cases-section {
@@ -526,8 +551,8 @@ pre {
 .st-code-editor {
   flex: 1;
   background-color: #1e1e1e;
-  color: #d4d4d4;
-  border: none;
+  color: #fcfcfc;
+
   font-family: 'JetBrains Mono', 'Fira Code', monospace;
   font-size: 14px;
   line-height: 1.5;
@@ -538,6 +563,7 @@ pre {
   overflow-y: auto;
   overflow-x: hidden;
   height: auto;
+  border: 1px solid rgb(36, 35, 35);
 }
 
 .st-code-editor:focus {
@@ -574,7 +600,7 @@ pre {
   font-weight: 600;
   border-bottom: none;
   margin-top: 55px;
-   margin-bottom: 0;
+  margin-bottom: 0;
 
 }
 

@@ -16,6 +16,7 @@ interface MCQOption {
 interface MCQQuestion {
   questionId: string;
   question: string;
+  description: string;
   options: MCQOption[];
   correctAnswer?: string[] | string;
   points?: number;
@@ -33,6 +34,7 @@ interface TestCase {
 interface CodingQuestion {
   questionId: string;
   question: string;
+  description: string;
   starterCode?: string;
   testCases?: TestCase[];
   points?: number;
@@ -204,6 +206,9 @@ const AssessmentTaking: React.FC = () => {
   // State for showing submit button after 20 minutes (keeping for compatibility)
   const [showSubmitButton, setShowSubmitButton] = useState<boolean>(false);
 
+  // State for submission confirmation modal
+  const [showSubmitConfirmation, setShowSubmitConfirmation] = useState<boolean>(false);
+
   // State for fullscreen mode
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -271,6 +276,44 @@ const AssessmentTaking: React.FC = () => {
 
     return { mcqQuestions, codingChallenges };
   }, [assessmentData]);
+
+  // Function to calculate attempted questions
+  const getAttemptedQuestions = useCallback(() => {
+    const mcqAttempted = mcqQuestions.filter(question => 
+      mcqAnswers[question.questionId] !== undefined
+    ).length;
+    
+    const codingAttempted = codingChallenges.filter(challenge => {
+      const challengeCode = code[challenge.questionId]?.[selectedLanguage] || '';
+      return challengeCode.trim().length > 0;
+    }).length;
+
+    return {
+      mcq: {
+        total: mcqQuestions.length,
+        attempted: mcqAttempted
+      },
+      coding: {
+        total: codingChallenges.length,
+        attempted: codingAttempted
+      }
+    };
+  }, [mcqQuestions, codingChallenges, mcqAnswers, code, selectedLanguage]);
+
+  // Handle Save and Next for MCQ questions
+  const handleSaveAndNext = useCallback(() => {
+    // Save current answer (already saved in state automatically)
+    // Check if this is the last MCQ question
+    if (currentMCQIndex >= mcqQuestions.length - 1) {
+      // Last MCQ question, move to coding tab if coding questions exist
+      if (codingChallenges.length > 0) {
+        handleTabChange('coding');
+      }
+    } else {
+      // Move to next MCQ question
+      setCurrentMCQIndex(prev => Math.min(mcqQuestions.length - 1, prev + 1));
+    }
+  }, [currentMCQIndex, mcqQuestions.length, codingChallenges.length, handleTabChange]);
 
   // Handle submit
   const handleSubmit = useCallback(async () => {
@@ -2042,7 +2085,7 @@ console.log("In a browser environment, this would render as HTML");
       <div className="st-assessment-header">
         <div className="st-header-left">
           <div className="st-assessment-title">
-            {assessmentData ? assessmentData.title : 'Assessment'}
+            {formatAssessmentId(assessmentData?.assessmentId || assessmentId || 'Assessment')}
           </div>
         </div>
 
@@ -2098,6 +2141,23 @@ console.log("In a browser environment, this would render as HTML");
                 </span>
                 {mcqQuestions[currentMCQIndex]?.question}
               </div>
+              
+              {/* Question Description */}
+              {mcqQuestions[currentMCQIndex]?.description && (
+                <div className="st-question-description" style={{
+                  marginTop: '16px',
+                  padding: '12px',
+                  backgroundColor: '#F3F4F6',
+                  borderRadius: '8px',
+                  borderLeft: '4px solid #3B82F6',
+                  fontSize: '0.9rem',
+                  color: '#4B5563',
+                  lineHeight: '1.5'
+                }}>
+                  <strong style={{ color: '#1F2937', display: 'block', marginBottom: '4px' }}>Description:</strong>
+                  {mcqQuestions[currentMCQIndex]?.description}
+                </div>
+              )}
 
               <div className="st-options-container">
                 {mcqQuestions[currentMCQIndex]?.options.map((option: MCQOption | string, index: number) => {
@@ -2129,18 +2189,44 @@ console.log("In a browser environment, this would render as HTML");
           <div className="st-coding-section">
             {/* Left: Problem & Test Cases */}
             <div className="st-problem-section">
-              <div className="st-coding-header">
-                <h2 className="st-challenge-title">
-                  {codingChallenges[currentCodingIndex]?.question || 'Coding Problem'}
-                </h2>
-              </div>
-
                    <div className="st-coding-content-scrollable">
+                {/* Question Section */}
                 <div className="st-problem-description">
-                  {codingChallenges[currentCodingIndex]?.question}
+                  <div className="st-question-label">Question:</div>
+                  <div className="st-question-content">
+                    {codingChallenges[currentCodingIndex]?.question}
+                  </div>
                 </div>
 
-                    {codingChallenges[currentCodingIndex]?.examples && codingChallenges[currentCodingIndex].examples.length > 0 && (
+                {/* Question Description */}
+                {codingChallenges[currentCodingIndex]?.description && (
+                  <div className="st-question-description" style={{
+                    marginTop: '16px',
+                    padding: '12px',
+                    backgroundColor: '#F3F4F6',
+                    borderRadius: '8px',
+                    borderLeft: '4px solid #3B82F6',
+                    fontSize: '0.9rem',
+                    color: '#4B5563',
+                    lineHeight: '1.5'
+                  }}>
+                    <strong style={{ color: '#1F2937', display: 'block', marginBottom: '4px' }}>Description:</strong>
+                    {codingChallenges[currentCodingIndex]?.description}
+                  </div>
+                )}
+
+                {/* Assessment Description & Instructions Section */}
+                {assessmentData?.description && (
+                  <div className="st-assessment-description">
+                    <div className="st-description-label">Description & Instructions:</div>
+                    <div className="st-description-content">
+                      {assessmentData.description}
+                    </div>
+                  </div>
+                )}
+
+                {/* Instructions/Examples Section */}
+                {codingChallenges[currentCodingIndex]?.examples && codingChallenges[currentCodingIndex].examples.length > 0 && (
                   <div className="st-examples">
                     <span className="st-example-label">Examples</span>
                     {codingChallenges[currentCodingIndex].examples!.map((ex, idx) => (
@@ -2391,10 +2477,9 @@ console.log("In a browser environment, this would render as HTML");
           {activeTab === 'mcq' ? (
             <button
               className="st-nav-btn next"
-              onClick={() => setCurrentMCQIndex(prev => Math.min(mcqQuestions.length - 1, prev + 1))}
-              disabled={currentMCQIndex === mcqQuestions.length - 1}
+              onClick={handleSaveAndNext}
             >
-              Next
+              Save and Next
             </button>
           ) : (
             <button
@@ -2408,7 +2493,7 @@ console.log("In a browser environment, this would render as HTML");
 
           <button
             className="st-submit-btn small"
-            onClick={handleSubmit}
+            onClick={() => setShowSubmitConfirmation(true)}
             disabled={isSubmitting || submitted}
           >
             {isSubmitting ? 'Submitting...' : 'Finish Test'}
@@ -2444,7 +2529,7 @@ console.log("In a browser environment, this would render as HTML");
               marginBottom: '16px',
             color: '#F59E0B'
             }}>
-              ⚠️
+              
             </div>
             <h3 style={{
               margin: '0 0 16px 0',
@@ -2485,6 +2570,191 @@ console.log("In a browser environment, this would render as HTML");
               I Understand
             </button>
         </div>
+        </div>
+      )}
+
+      {/* Submission Confirmation Modal */}
+      {showSubmitConfirmation && (
+        <div style={{
+          position: 'fixed',
+          top: '0',
+          left: '0',
+          right: '0',
+          bottom: '0',
+          backgroundColor: 'rgba(0, 0, 0, 0.5)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 9999
+        }}>
+          <div style={{
+            backgroundColor: 'white',
+            padding: '32px',
+            borderRadius: '12px',
+            maxWidth: '500px',
+            width: '90%',
+            textAlign: 'center',
+            boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)'
+          }}>
+            <div style={{
+              fontSize: '48px',
+              marginBottom: '16px',
+              color: '#F59E0B'
+            }}>
+              
+            </div>
+            <h3 style={{
+              margin: '0 0 16px 0',
+              color: '#1F2937',
+              fontSize: '20px',
+              fontWeight: '600'
+            }}>
+              Submit Assessment?
+            </h3>
+            <p style={{
+              margin: '0 0 24px 0',
+              color: '#6B7280',
+              fontSize: '14px',
+              lineHeight: '1.5'
+            }}>
+              Please review your assessment summary before submitting. This action cannot be undone.
+            </p>
+            
+            {/* Assessment Summary Table */}
+            <table style={{
+              width: '100%',
+              borderCollapse: 'collapse',
+              marginBottom: '24px',
+              fontSize: '14px'
+            }}>
+              <thead>
+                <tr style={{
+                  backgroundColor: '#F9FAFB',
+                  borderBottom: '2px solid #E5E7EB'
+                }}>
+                  <th style={{
+                    padding: '12px',
+                    textAlign: 'left',
+                    fontWeight: '600',
+                    color: '#374151',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    Question Type
+                  </th>
+                  <th style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    color: '#374151',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    Total Questions
+                  </th>
+                  <th style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    fontWeight: '600',
+                    color: '#374151',
+                    borderBottom: '1px solid #E5E7EB'
+                  }}>
+                    Attempted
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr style={{
+                  borderBottom: '1px solid #E5E7EB'
+                }}>
+                  <td style={{
+                    padding: '12px',
+                    fontWeight: '500',
+                    color: '#1F2937'
+                  }}>
+                    MCQ
+                  </td>
+                  <td style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    color: '#6B7280'
+                  }}>
+                    {getAttemptedQuestions().mcq.total}
+                  </td>
+                  <td style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    color: '#6B7280'
+                  }}>
+                    {getAttemptedQuestions().mcq.attempted}
+                  </td>
+                </tr>
+                <tr>
+                  <td style={{
+                    padding: '12px',
+                    fontWeight: '500',
+                    color: '#1F2937'
+                  }}>
+                    Coding
+                  </td>
+                  <td style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    color: '#6B7280'
+                  }}>
+                    {getAttemptedQuestions().coding.total}
+                  </td>
+                  <td style={{
+                    padding: '12px',
+                    textAlign: 'center',
+                    color: '#6B7280'
+                  }}>
+                    {getAttemptedQuestions().coding.attempted}
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+            
+            <div style={{
+              display: 'flex',
+              gap: '12px',
+              justifyContent: 'center'
+            }}>
+              <button
+                onClick={() => setShowSubmitConfirmation(false)}
+                style={{
+                  backgroundColor: '#6B7280',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => {
+                  setShowSubmitConfirmation(false);
+                  handleSubmit();
+                }}
+                style={{
+                  backgroundColor: '#EF4444',
+                  color: 'white',
+                  border: 'none',
+                  padding: '10px 20px',
+                  borderRadius: '6px',
+                  fontSize: '14px',
+                  fontWeight: '500',
+                  cursor: 'pointer',
+                  transition: 'background-color 0.2s'
+                }}
+              >
+                Yes, Submit
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

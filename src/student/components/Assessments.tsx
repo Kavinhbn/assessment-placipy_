@@ -64,6 +64,18 @@ const Assessments: React.FC = () => {
   const navigate = useNavigate();
   const { user } = useUser();
   
+  // Helper function to convert assessment ID format
+  const formatAssessmentId = (assessmentId: string) => {
+    // Extract the number from assessment ID like "ASSESS_CE_004"
+    const match = assessmentId.match(/(\d+)$/);
+    if (match) {
+      const number = parseInt(match[1], 10);
+      return `Assessment-${number}`;
+    }
+    // Fallback to original ID if no number found
+    return assessmentId;
+  };
+
   const PAGE_SIZE = 8; // Define page size for pagination
 
   // Helper function to check if assessment is older than 5 days
@@ -286,11 +298,11 @@ const Assessments: React.FC = () => {
     const { status, isPublished, scheduling } = assessment;
     const now = new Date();
     
-    // If already attempted, show "Completed" button
+    // If already attempted, show "View Result" button
     if (isAttempted) {
       return { 
-        text: 'Completed', 
-        style: { background: '#4B5563', color: 'white' },
+        text: 'View Result', 
+        style: { background: '#10B981', color: 'white' },
         disabled: false
       };
     }
@@ -364,7 +376,7 @@ const Assessments: React.FC = () => {
             border: '1px solid #E5E7EB',
             borderRadius: '8px',
             padding: '8px 16px',
-            background: '#f8f9fa',
+            background: '#fff',
             width: '120px',
             height: '36px',
             animation: 'loading 1.5s infinite'
@@ -730,8 +742,6 @@ const Assessments: React.FC = () => {
           
           // Get status text based on timing
           const getStatusText = (assessment: Assessment) => {
-            if (isAttempted) return 'Completed';
-            
             const now = new Date();
             const startDate = new Date(assessment.scheduling.startDate);
             const endDate = new Date(assessment.scheduling.endDate);
@@ -758,16 +768,18 @@ const Assessments: React.FC = () => {
                 justifyContent: 'space-between',
                 alignItems: 'center'
               }}>
-                <h3 style={{ margin: 0, fontSize: '14px', color: '#111827' }}>{assessment.title}</h3>
-                <span style={{
-                  padding: '2px 8px',
-                  borderRadius: '9999px',
-                  fontSize: '10px',
-                  fontWeight: 600,
-                  ...(isAttempted ? { background: '#DBEAFE', color: '#1E40AF' } : statusStyle)
-                }}>
-                  {getStatusText(assessment)}
-                </span>
+                <h3 style={{ margin: 0, fontSize: '14px', color: '#111827' }}>{formatAssessmentId(assessment.assessmentId)}</h3>
+                {!isAttempted && (
+                  <span style={{
+                    padding: '2px 8px',
+                    borderRadius: '9999px',
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    ...statusStyle
+                  }}>
+                    {getStatusText(assessment)}
+                  </span>
+                )}
               </div>
 
               <div style={{ padding: '12px', flexGrow: 1 }}>

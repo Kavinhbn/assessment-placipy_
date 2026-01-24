@@ -96,8 +96,31 @@
   margin-right: 16px;
 }
 
+/* Hide hamburger menu when sidebar is open */
 .student-dashboard.sidebar-open .std_hamburger-menu {
-  opacity: 0.7;
+  display: none !important;
+}
+
+/* Sidebar Overlay */
+.sidebar-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 999;
+  opacity: 0;
+  animation: fadeIn 0.3s ease forwards;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* Hide overlay on desktop */
@@ -236,7 +259,7 @@
   flex: 1;
   padding: 4px;
   overflow-y: auto;
-  background-color: #f8f9fa;
+  background-color: #fff;
   transition: padding-left 0.3s ease;
   padding-left: 50px;
 }
@@ -262,7 +285,7 @@
 }
 
 .sidebar-header {
-  padding: 15px;
+  padding: 20px 15px;
   border-bottom: 1px solid rgba(255, 255, 255, 0.1);
   display: flex;
   align-items: center;
@@ -270,13 +293,10 @@
   width: 100%;
 }
 
-
-
-
-
 .sidebar-header-content {
   display: flex;
   align-items: center;
+  justify-content: space-between;
   gap: 12px;
   width: 100%;
 }
@@ -284,6 +304,34 @@
 .sidebar-title {
   margin: 0;
   flex-grow: 1;
+  font-size: 1.5rem;
+  font-weight: 600;
+}
+
+/* Sidebar Close Button (X button) */
+.sidebar-close-btn {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  color: white;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  flex-shrink: 0;
+}
+
+.sidebar-close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
+  transform: rotate(90deg);
+}
+
+.sidebar-close-btn svg {
+  width: 20px;
+  height: 20px;
 }
 
 .sidebar-header h2 {
@@ -397,10 +445,11 @@
   flex-direction: column;
   overflow: hidden;
   width: 100%;
+  background-color: #fff;
 }
 
 .dashboard-header {
-  background: #f0e6ff;
+  background: #f0e6ff4a;
   padding: 20px 30px;
   border-bottom: 1px solid #e9ecef;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
@@ -497,6 +546,7 @@
 .user-details .name {
   font-weight: 600;
   margin: 0;
+  color:#111827;
 }
 
 .user-details .role {
@@ -565,7 +615,7 @@
   flex-grow: 1;
   overflow-y: auto;
   padding: 30px;
-  background-color: #f8f9fa;
+  background-color: #fff;
   padding-left: 280px;
 }
 
