@@ -214,40 +214,6 @@ const DashboardHome: React.FC = () => {
               setPerformanceData([]);
             }
 
-            // PTO announcements -> local notifications
-            try {
-              interface Announcement {
-                id?: string;
-                SK?: string;
-                title: string;
-                createdAt?: string;
-                content?: string;
-                message?: string;
-              }
-
-              const announcements = (statsResponse.data as { announcements?: Announcement[] }).announcements || [];
-              if (Array.isArray(announcements)) {
-                const seenKey = 'student_announcements_seen';
-                const seenIds = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
-                announcements.forEach((ann: Announcement) => {
-                  const id = String(ann.id || ann.SK || `${ann.title}-${ann.createdAt || ''}`);
-                  if (!seenIds.has(id)) {
-                    addNotification({
-                      type: 'announcement',
-                      title: ann.title || 'Announcement',
-                      message: ann.message || ann.content || '',
-                      link: '/student/notifications',
-                      priority: 'low'
-                    });
-                    seenIds.add(id);
-                  }
-                });
-                localStorage.setItem(seenKey, JSON.stringify(Array.from(seenIds)));
-              }
-            } catch (_unused: unknown) {
-              // no announcements available
-              void _unused; // Mark as intentionally unused
-            }
           }
         } catch (statsError: unknown) {
           console.log('Error fetching dashboard stats:', statsError);
@@ -258,31 +224,6 @@ const DashboardHome: React.FC = () => {
           setPerformanceData([]);
         }
 
-        // Results published notification
-        try {
-          const res = await ResultsService.getStudentResults();
-          const list: AssessmentResult[] = res?.data || res || [];
-          const seenKey = 'notif_results_seen_ids';
-          const seen = new Set<string>((JSON.parse(localStorage.getItem(seenKey) || '[]')) as string[]);
-          list.forEach((r) => {
-            const aid = r?.assessmentId;
-            if (!aid) return;
-            const published = r?.isResultPublished ?? true;
-            if (published && !seen.has(aid)) {
-              addNotification({
-                type: 'result_published',
-                title: 'Your results are available',
-                message: 'View your latest assessment results.',
-                link: `/student/results`,
-                priority: 'medium'
-              });
-              seen.add(aid);
-            }
-          });
-          localStorage.setItem(seenKey, JSON.stringify(Array.from(seen)));
-        } catch (e) {
-          console.error('Result notification logic failed', e);
-        }
 
 
       } catch (err: unknown) {

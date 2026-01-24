@@ -244,14 +244,14 @@ export const NotificationProvider: React.FC<NotificationProviderProps> = ({ chil
                     if (!item || !item.assessmentId || !item.scheduledAt) return;
                     const target = new Date(item.scheduledAt).getTime();
                     const diffMin = Math.floor((target - now) / 60000);
-                    [10, 5, 1].forEach(m => {
+                    [5].forEach(m => {
                         if (diffMin === m) {
                             const key = makeKey(item.assessmentId, m);
                             if (shouldFire(key)) {
                                 markFired(key);
                                 addNotification({
                                     type: 'reminder',
-                                    title: m === 10 ? 'Test starts in 10 minutes' : m === 5 ? 'Test starts in 5 minutes' : 'Test starts in 1 minute',
+                                    title: 'Test starts in 5 minutes',
                                     message: 'Get ready to begin your assessment.',
                                     link: `/student/assessments`,
                                     priority: 'high'

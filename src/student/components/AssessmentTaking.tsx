@@ -1149,7 +1149,7 @@ console.log("In a browser environment, this would render as HTML");
             // If there's a compilation error, show it in the actual output
             results.push({
               passed: false,
-              actualOutput: `❌ Compilation Error:\n${result.compile_output}`,
+              actualOutput: `X Compilation Error:\n${result.compile_output}`,
               expectedOutput: testCase.expectedOutput,
               input: testCase.input
             });
@@ -1160,7 +1160,7 @@ console.log("In a browser environment, this would render as HTML");
           if (result.stderr) {
             results.push({
               passed: false,
-              actualOutput: `❌ Runtime Error:\n${result.stderr}`,
+              actualOutput: `X Runtime Error:\n${result.stderr}`,
               expectedOutput: testCase.expectedOutput,
               input: testCase.input
             });
