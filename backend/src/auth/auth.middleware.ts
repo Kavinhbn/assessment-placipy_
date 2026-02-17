@@ -122,4 +122,4 @@ const authorizeRole = (...roles) => {
     };
 };
 
-export { authenticateToken };
+export { authenticateToken, authorizeRole };

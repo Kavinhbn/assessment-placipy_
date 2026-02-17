@@ -1122,4 +1122,4 @@ class AssessmentService {
     }
 }
 
-module.exports = new AssessmentService();
+export default new AssessmentService();
