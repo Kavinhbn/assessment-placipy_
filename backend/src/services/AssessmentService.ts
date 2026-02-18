@@ -76,6 +76,7 @@ interface QuestionItem {
     unit?: string;
     explanation?: string;
     starterCode?: string;
+    description?: string; // Add description field for instructions
     testCases?: TestCase[];
     PK?: string; // PK can exist if it was part of the original structure
 }
@@ -313,6 +314,7 @@ class AssessmentService {
                     baseQuestion.entityType = 'coding';
                     baseQuestion.category = 'PROGRAMMING';
                     baseQuestion.starterCode = question.starterCode || '';
+                    baseQuestion.description = question.instructions || '';
 
                     if (question.testCases && question.testCases.length > 0) {
                         baseQuestion.testCases = question.testCases.map((tc: any) => ({
